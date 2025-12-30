@@ -19,43 +19,20 @@ local Title = Instance.new("TextLabel"); Title.Size = UDim2.new(1, -10, 1, 0); T
 local PyStatus = Instance.new("TextLabel"); PyStatus.Size = UDim2.new(1, -10, 0, 20); PyStatus.Position = UDim2.new(0, 10, 0, 35); PyStatus.BackgroundTransparency = 1; PyStatus.Text = "Connecting..."; PyStatus.TextColor3 = Color3.fromRGB(255, 255, 0); PyStatus.Font = Enum.Font.GothamBold; PyStatus.TextSize = 11; PyStatus.TextXAlignment = Enum.TextXAlignment.Left; PyStatus.Parent = MainFrame
 local InfoLabel = Instance.new("TextLabel"); InfoLabel.Size = UDim2.new(1, -20, 0, 60); InfoLabel.Position = UDim2.new(0, 10, 0, 60); InfoLabel.BackgroundTransparency = 1; InfoLabel.Text = "Wave: 0\nHealth: 0\nCash: 0"; InfoLabel.TextColor3 = Color3.fromRGB(200, 200, 200); InfoLabel.Font = Enum.Font.Gotham; InfoLabel.TextSize = 12; InfoLabel.TextXAlignment = Enum.TextXAlignment.Left; InfoLabel.TextYAlignment = Enum.TextYAlignment.Top; InfoLabel.Parent = MainFrame
 
--- == ANTI-STICK DRAGGING SYSTEM ==
-local dragging
-local dragInput
-local dragStart
-local startPos
-
+-- == DRAGGING FIX ==
+local dragging, dragInput, dragStart, startPos
 local function update(input)
     local delta = input.Position - dragStart
     MainFrame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
 end
-
 TopBar.InputBegan:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-        dragging = true
-        dragStart = input.Position
-        startPos = MainFrame.Position
-        
-        -- Вот этот кусок кода гарантирует, что "клещ отцепится"
-        input.Changed:Connect(function()
-            if input.UserInputState == Enum.UserInputState.End then
-                dragging = false
-            end
-        end)
+        dragging = true; dragStart = input.Position; startPos = MainFrame.Position
+        input.Changed:Connect(function() if input.UserInputState == Enum.UserInputState.End then dragging = false end end)
     end
 end)
-
-TopBar.InputChanged:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
-        dragInput = input
-    end
-end)
-
-UserInputService.InputChanged:Connect(function(input)
-    if input == dragInput and dragging then
-        update(input)
-    end
-end)
+TopBar.InputChanged:Connect(function(input) if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then dragInput = input end end)
+UserInputService.InputChanged:Connect(function(input) if input == dragInput and dragging then update(input) end end)
 
 -- == DATA LOGIC ==
 local State = ReplicatedStorage:WaitForChild("State", 10)
@@ -122,28 +99,52 @@ local function getTowers()
     return my_towers
 end
 
+-- == FINAL CASH FIX (ПРИОРИТЕТ НА ТЕКСТ) ==
 local function getGameStats()
     local info = {Wave=0, Health=0, Cash=0}
+    
+    -- 1. WAVE & HEALTH (State - всегда точно)
     pcall(function()
         if State then
             if State:FindFirstChild("Wave") then info.Wave = State.Wave.Value end
             if State:FindFirstChild("Health") then info.Health = State.Health.Current.Value end
         end
-        if Player:FindFirstChild("leaderstats") and Player.leaderstats:FindFirstChild("Cash") then
-            info.Cash = Player.leaderstats.Cash.Value 
-        elseif Player:FindFirstChild("Cash") then
-            info.Cash = Player.Cash.Value
-        else
-            local gui = PlayerGui:FindFirstChild("GameGui")
-            if gui then
-                local cashObj = gui:FindFirstChild("Money", true) or gui:FindFirstChild("Cash", true)
-                if cashObj and cashObj:IsA("TextLabel") then
-                    local txt = cashObj.Text:gsub("%$", ""):gsub(",", "")
-                    info.Cash = tonumber(txt) or 0
+    end)
+    
+    -- 2. CASH (Теперь сначала ищем ТЕКСТ, и только потом Value)
+    pcall(function()
+        local foundCash = false
+        
+        -- СПОСОБ 1: Читаем текст с экрана (Там всегда правильное число)
+        local gui = PlayerGui:FindFirstChild("GameGui")
+        if gui then
+            local cashObj = gui:FindFirstChild("Money", true) or gui:FindFirstChild("Cash", true)
+            if cashObj and cashObj:IsA("TextLabel") then
+                -- Убираем $ и запятые
+                local txt = cashObj.Text:gsub("%$", ""):gsub(",", "")
+                local num = tonumber(txt)
+                if num then
+                    info.Cash = num
+                    foundCash = true
                 end
             end
         end
+        
+        -- СПОСОБ 2: Leaderstats (Если текст не нашли)
+        if not foundCash and Player:FindFirstChild("leaderstats") then
+            local ls = Player.leaderstats
+            if ls:FindFirstChild("Cash") then info.Cash = ls.Cash.Value 
+            elseif ls:FindFirstChild("Money") then info.Cash = ls.Money.Value end
+        end
+        
+        -- СПОСОБ 3: Player.Cash (ТОЛЬКО ЕСЛИ ОНО НЕ ОТРИЦАТЕЛЬНОЕ)
+        if not foundCash and info.Cash <= 0 and Player:FindFirstChild("Cash") then
+            if Player.Cash.Value > 0 then -- Берем только если положительное
+                info.Cash = Player.Cash.Value
+            end
+        end
     end)
+    
     return info
 end
 
@@ -164,4 +165,4 @@ task.spawn(function()
         end
     end
 end)
-print("✅ COMBAT SCRIPT: GUI FIX v4")
+print("✅ COMBAT SCRIPT: CASH FIXED v5")
