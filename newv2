@@ -1,5 +1,3 @@
-print("🔥 RELOADING COMBAT SCRIPT... 🔥")
-
 local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -9,149 +7,133 @@ local Player = Players.LocalPlayer
 
 local SERVER_URL = "http://127.0.0.1:5000"
 local request_func = (syn and syn.request) or (http and http.request) or (http_request) or (fluxus and fluxus.request) or request
-local Remote = ReplicatedStorage:WaitForChild("RemoteFunction")
+local RemoteFunction = ReplicatedStorage:WaitForChild("RemoteFunction")
 
--- == CONFIG LOADER ==
-local MatchConfig = {mode = "Easy", autoskip = false}
+-- == ПЕРЕМЕННЫЕ ДЛЯ СТАТОВ ==
+local Stats = {
+    Wave = "Waiting...",
+    Health = 0,
+    Cash = 0
+}
+
+-- == 1. СЛУШАЕМ RE:SetStats (ВОЛНЫ И ХП) ==
 task.spawn(function()
-    if request_func then
-        local s, r = pcall(function() return request_func({Url=SERVER_URL.."/get_match_config", Method="GET"}) end)
-        if s and r.StatusCode == 200 then
-            local d = HttpService:JSONDecode(r.Body)
-            MatchConfig.mode = d.mode; MatchConfig.autoskip = d.autoskip
-            task.wait(1); Remote:InvokeServer("Difficulty", "Vote", d.mode)
-            task.wait(1); Remote:InvokeServer("Difficulty", "Ready")
+    -- Пытаемся найти этот ивент. Если путь изменится, скрипт не умрет, но волны не будет.
+    local success, Network = pcall(function() return ReplicatedStorage:WaitForChild("Network") end)
+    if success and Network then
+        local Sandbox = Network:FindFirstChild("Sandbox")
+        if Sandbox then
+            local SetStats = Sandbox:FindFirstChild("RE:SetStats")
+            if SetStats then
+                SetStats.OnClientEvent:Connect(function(data)
+                    if type(data) == "table" then
+                        local w = data.Wave or "?"
+                        local max = data.MaxWave or "?"
+                        -- Логика: Если есть WavesLeft, прибавляем к текущей
+                        if data.WavesLeft and tonumber(w) then 
+                            max = tonumber(w) + data.WavesLeft 
+                        end
+                        
+                        Stats.Wave = tostring(w) .. " / " .. tostring(max)
+                        
+                        if data.Health then Stats.Health = data.Health end
+                    end
+                end)
+            end
         end
     end
 end)
 
--- == GUI ==
+-- == 2. GUI (ВИЗУАЛ) ==
 local PlayerGui = Player:WaitForChild("PlayerGui")
 if PlayerGui:FindFirstChild("TDS_MatchHub") then PlayerGui.TDS_MatchHub:Destroy() end
 local ScreenGui = Instance.new("ScreenGui"); ScreenGui.Name = "TDS_MatchHub"; ScreenGui.Parent = PlayerGui; ScreenGui.ResetOnSpawn = false
-local MainFrame = Instance.new("Frame"); MainFrame.Size = UDim2.new(0, 220, 0, 130); MainFrame.Position = UDim2.new(0, 20, 0.5, -65); MainFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 30); MainFrame.Parent = ScreenGui; Instance.new("UICorner", MainFrame).CornerRadius = UDim.new(0, 8)
-local Title = Instance.new("TextLabel"); Title.Size = UDim2.new(1, -10, 0, 20); Title.Position = UDim2.new(0, 10, 0, 5); Title.BackgroundTransparency = 1; Title.Text = "TDS BOT (Running)"; Title.TextColor3 = Color3.fromRGB(0, 255, 0); Title.Font = Enum.Font.GothamBold; Title.TextSize = 12; Title.TextXAlignment = Enum.TextXAlignment.Left; Title.Parent = MainFrame
-local InfoLabel = Instance.new("TextLabel"); InfoLabel.Size = UDim2.new(1, -20, 0, 60); InfoLabel.Position = UDim2.new(0, 10, 0, 40); InfoLabel.BackgroundTransparency = 1; InfoLabel.TextColor3 = Color3.fromRGB(200, 200, 200); InfoLabel.Font = Enum.Font.Gotham; InfoLabel.TextSize = 12; InfoLabel.TextXAlignment = Enum.TextXAlignment.Left; InfoLabel.Parent = MainFrame
+local MainFrame = Instance.new("Frame"); MainFrame.Size = UDim2.new(0, 200, 0, 90); MainFrame.Position = UDim2.new(0, 20, 0.5, 0); MainFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 25); MainFrame.Parent = ScreenGui; Instance.new("UICorner", MainFrame).CornerRadius = UDim.new(0, 8)
+local InfoLabel = Instance.new("TextLabel"); InfoLabel.Size = UDim2.new(1, -20, 1, -10); InfoLabel.Position = UDim2.new(0, 10, 0, 5); InfoLabel.BackgroundTransparency = 1; InfoLabel.TextColor3 = Color3.new(1, 1, 1); InfoLabel.Font = Enum.Font.GothamMedium; InfoLabel.TextSize = 13; InfoLabel.TextXAlignment = Enum.TextXAlignment.Left; InfoLabel.Parent = MainFrame
 
+-- Перетаскивание
 local dragging, dragInput, dragStart, startPos
 MainFrame.InputBegan:Connect(function(i) if i.UserInputType==Enum.UserInputType.MouseButton1 then dragging=true;dragStart=i.Position;startPos=MainFrame.Position end end)
 MainFrame.InputChanged:Connect(function(i) if i.UserInputType==Enum.UserInputType.MouseMovement then dragInput=i end end)
 UserInputService.InputChanged:Connect(function(i) if dragging and i==dragInput then local d=i.Position-dragStart;MainFrame.Position=UDim2.new(startPos.X.Scale,startPos.X.Offset+d.X,startPos.Y.Scale,startPos.Y.Offset+d.Y) end end)
 UserInputService.InputEnded:Connect(function(i) if i.UserInputType==Enum.UserInputType.MouseButton1 then dragging=false end end)
 
--- == DATA COLLECTORS ==
-local pathNodes = {}
-local function cachePaths()
-    local map = Workspace:FindFirstChild("Map")
-    local pF = map and map:FindFirstChild("Paths")
-    if pF then
-        local mP = pF:FindFirstChild("1") or pF:GetChildren()[1]
-        local nodes = mP:GetChildren(); table.sort(nodes, function(a,b) return (tonumber(a.Name) or 0)<(tonumber(b.Name) or 0) end)
-        for _, p in ipairs(nodes) do table.insert(pathNodes, p.Position) end
-    end
+-- == 3. ФУНКЦИИ СБОРА ==
+local function updateCash()
+    pcall(function()
+        local h = PlayerGui:FindFirstChild("ReactUniversalHotbar")
+        if h and h.Frame.values:FindFirstChild("cash") then
+            -- Чистим текст ($1,234 -> 1234)
+            local txt = h.Frame.values.cash.amount.Text
+            Stats.Cash = tonumber(txt:gsub("%D", "")) or Stats.Cash
+        end
+    end)
 end
-cachePaths()
 
 local function getTowers()
     local t = {}
-    if Workspace:FindFirstChild("Towers") then
-        for _, tower in ipairs(Workspace.Towers:GetChildren()) do
-            if tower:FindFirstChild("Owner") and tower.Owner.Value == Player.UserId and tower:FindFirstChild("Replicator") then
-                local attr = tower.Replicator:GetAttributes()
-                local root = tower:FindFirstChild("HumanoidRootPart")
-                if root then
-                    table.insert(t, {
-                        Name = tower.Name, Level = attr["Level"] or 0,
-                        Pos = {x=math.floor(root.Position.X), z=math.floor(root.Position.Z)},
-                        Stats = {DmgDealt = attr["DamageDealt"] or 0, Sell = math.floor((attr["TotalInvestment"] or 0)*0.5), Cost = attr["TotalInvestment"] or 0, Upgrade = (attr["Level"] or 0)<5 and (attr["NextUpgradeCost"] or "Unknown") or "Full", Dmg = attr["Damage"] or 0, Cd = attr["Firerate"] or 0, Rng = attr["Range"] or 0, Bonus = (attr["Hidden"] and "Hidden" or "")..(attr["Flying"] and "Flying" or "")}
-                    })
+    pcall(function()
+        local f = Workspace:FindFirstChild("Towers")
+        if f then
+            for _, v in ipairs(f:GetChildren()) do
+                if v:FindFirstChild("Owner") and v.Owner.Value == Player.UserId and v:FindFirstChild("Replicator") then
+                    local a = v.Replicator:GetAttributes()
+                    local r = v:FindFirstChild("HumanoidRootPart")
+                    if r then
+                        table.insert(t, {
+                            Name = v.Name, Level = a["Level"] or 0,
+                            Pos = {x=math.floor(r.Position.X), z=math.floor(r.Position.Z)},
+                            Stats = {DmgDealt = a["DamageDealt"] or 0, Sell = math.floor((a["TotalInvestment"] or 0)*0.5), Cost = a["TotalInvestment"] or 0}
+                        })
+                    end
                 end
             end
         end
-    end
+    end)
     return t
 end
 
--- == SEARCH FUNCTIONS (THE "VACUUM CLEANER") ==
--- Эта функция ищет текст внутри Hotbar, не зная точного пути
-local function findStatInHotbar(keyword)
-    local hotbar = PlayerGui:FindFirstChild("ReactUniversalHotbar")
-    if not hotbar then return nil end
-    
-    -- Ищем глубоко внутри всех папок
-    for _, v in ipairs(hotbar:GetDescendants()) do
-        if v:IsA("TextLabel") then
-            -- Если это деньги (содержит $)
-            if keyword == "Cash" and v.Text:find("%$") then
-                return v.Text
-            end
-            -- Если это ХП (родитель называется health)
-            if keyword == "Health" and v.Parent and v.Parent.Name == "health" then
-                 return v.Text
-            end
-        end
-    end
-    return nil
-end
-
-local function getStats()
-    local info = {Wave="...", Health=0, Cash=0}
-    
-    -- 1. WAVE (State - Самый надежный)
-    pcall(function()
-        local State = ReplicatedStorage:FindFirstChild("State")
-        if State then
-            local w = State:FindFirstChild("Wave") and State.Wave.Value or 0
-            local m = State:FindFirstChild("MaxWave") and State.MaxWave.Value or State:FindFirstChild("SurvivalWave") and State.SurvivalWave.Value or "?"
-            info.Wave = w .. " / " .. m
-            
-            -- Если ХП есть в State, берем оттуда
-            if State:FindFirstChild("Health") then info.Health = State.Health.Current.Value end
-        end
-    end)
-    
-    -- 2. CASH (Ищем везде в хотбаре текст с "$")
-    pcall(function()
-        local cashTxt = findStatInHotbar("Cash")
-        if cashTxt then
-            local clean = cashTxt:gsub("%$", ""):gsub(",", ""):gsub(" ", "")
-            info.Cash = tonumber(clean) or info.Cash
-        end
-    end)
-    
-    return info
-end
-
--- == MAIN LOOP ==
+-- == 4. ОСНОВНОЙ ЦИКЛ ==
 local lastSkip = 0
-local colorToggle = false
+local MatchConfig = {mode = "Easy", autoskip = false}
 
+-- Получаем настройки при старте
 task.spawn(function()
-    while task.wait(0.2) do
-        -- Индикатор жизни (Мигает)
-        colorToggle = not colorToggle
-        Title.TextColor3 = colorToggle and Color3.fromRGB(0, 255, 0) or Color3.fromRGB(0, 150, 0)
-        
-        -- Сбор данных с защитой от ошибок
-        local s, err = pcall(function()
-            local stats = getStats()
-            InfoLabel.Text = "Wave: " .. stats.Wave .. "\nHealth: " .. stats.Health .. "\nCash: $" .. stats.Cash
-            
-            if MatchConfig.autoskip and tick()-lastSkip > 3 then
-                Remote:InvokeServer("Voting", "Skip"); lastSkip=tick()
-            end
-            
-            if request_func then
-                local payload = {Type="MATCH", Stats=stats, Enemies={}, Towers=getTowers()}
-                request_func({Url=SERVER_URL.."/match_data", Method="POST", Headers={["Content-Type"]="application/json"}, Body=HttpService:JSONEncode(payload)})
-            end
-        end)
-        
-        if not s then
-            warn("CRASH PREVENTED: " .. tostring(err))
-            Title.Text = "ERROR! Check Console (F9)"
-            Title.TextColor3 = Color3.fromRGB(255, 0, 0)
+    if request_func then
+        local s, r = pcall(function() return request_func({Url=SERVER_URL.."/get_match_config", Method="GET"}) end)
+        if s and r.StatusCode == 200 then
+            MatchConfig = HttpService:JSONDecode(r.Body)
+            task.wait(1.5)
+            RemoteFunction:InvokeServer("Difficulty", "Vote", MatchConfig.mode)
+            task.wait(1)
+            RemoteFunction:InvokeServer("Difficulty", "Ready")
         end
     end
 end)
-print("✅ UNIVERSAL SCANNER ACTIVE")
+
+task.spawn(function()
+    while task.wait(0.2) do
+        updateCash() -- Обновляем деньги
+        
+        InfoLabel.Text = string.format("🌊 Wave: %s\n❤️ HP: %d\n💰 Cash: $%d", Stats.Wave, Stats.Health, Stats.Cash)
+        
+        -- Авто Скип
+        if MatchConfig.autoskip and tick() - lastSkip > 3 then
+            RemoteFunction:InvokeServer("Voting", "Skip")
+            lastSkip = tick()
+        end
+
+        -- Отправка
+        if request_func then
+            local payload = {Type="MATCH", Stats=Stats, Towers=getTowers()}
+            pcall(function()
+                request_func({
+                    Url = SERVER_URL .. "/match_data",
+                    Method = "POST",
+                    Headers = {["Content-Type"] = "application/json"},
+                    Body = HttpService:JSONEncode(payload)
+                })
+            end)
+        end
+    end
+end)
