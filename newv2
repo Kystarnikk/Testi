@@ -19,7 +19,7 @@ local Title = Instance.new("TextLabel"); Title.Size = UDim2.new(1, -10, 1, 0); T
 local PyStatus = Instance.new("TextLabel"); PyStatus.Size = UDim2.new(1, -10, 0, 20); PyStatus.Position = UDim2.new(0, 10, 0, 35); PyStatus.BackgroundTransparency = 1; PyStatus.Text = "Connecting..."; PyStatus.TextColor3 = Color3.fromRGB(255, 255, 0); PyStatus.Font = Enum.Font.GothamBold; PyStatus.TextSize = 11; PyStatus.TextXAlignment = Enum.TextXAlignment.Left; PyStatus.Parent = MainFrame
 local InfoLabel = Instance.new("TextLabel"); InfoLabel.Size = UDim2.new(1, -20, 0, 60); InfoLabel.Position = UDim2.new(0, 10, 0, 60); InfoLabel.BackgroundTransparency = 1; InfoLabel.Text = "Wave: 0\nHealth: 0\nCash: 0"; InfoLabel.TextColor3 = Color3.fromRGB(200, 200, 200); InfoLabel.Font = Enum.Font.Gotham; InfoLabel.TextSize = 12; InfoLabel.TextXAlignment = Enum.TextXAlignment.Left; InfoLabel.TextYAlignment = Enum.TextYAlignment.Top; InfoLabel.Parent = MainFrame
 
--- == DRAG FIX ==
+-- == DRAG SYSTEM ==
 local dragging, dragInput, dragStart, startPos
 local function update(input)
     local delta = input.Position - dragStart
@@ -99,45 +99,48 @@ local function getTowers()
     return my_towers
 end
 
--- == CASH FIX: READING FROM GUI TEXT ==
+-- == SMART MONEY READER ==
+-- Эта функция ищет текст на экране, игнорируя "поломанную" переменную Cash
+local function getRealCash()
+    local cash = 0
+    local found = false
+    
+    -- 1. Ищем GUI (Самый точный способ)
+    local gui = PlayerGui:FindFirstChild("GameGui")
+    if gui then
+        -- Пробегаем по всем текстовым полям в интерфейсе
+        for _, v in ipairs(gui:GetDescendants()) do
+            if v:IsA("TextLabel") then
+                -- Если имя похоже на деньги или текст содержит "$"
+                if v.Name == "Money" or v.Name == "Cash" or v.Name == "MoneyValue" then
+                    local clean = v.Text:gsub("%$", ""):gsub(",", "") -- Убираем $ и ,
+                    if tonumber(clean) then
+                        cash = tonumber(clean)
+                        found = true
+                        break 
+                    end
+                end
+            end
+        end
+    end
+    
+    -- 2. Запасной вариант: Leaderstats (Иногда работает)
+    if not found and Player:FindFirstChild("leaderstats") then
+        if Player.leaderstats:FindFirstChild("Cash") then cash = Player.leaderstats.Cash.Value end
+    end
+    
+    return cash
+end
+
 local function getGameStats()
     local info = {Wave=0, Health=0, Cash=0}
-    
-    -- 1. Wave & Health (State надежен)
     pcall(function()
         if State then
             if State:FindFirstChild("Wave") then info.Wave = State.Wave.Value end
             if State:FindFirstChild("Health") then info.Health = State.Health.Current.Value end
         end
+        info.Cash = getRealCash() -- Используем нашу новую функцию
     end)
-    
-    -- 2. CASH (Приоритет на чтение текста с экрана)
-    pcall(function()
-        local found = false
-        local gui = PlayerGui:FindFirstChild("GameGui")
-        
-        if gui then
-            -- Ищем лейбл с деньгами (обычно называется Money или Cash и содержит знак $)
-            for _, v in ipairs(gui:GetDescendants()) do
-                if v:IsA("TextLabel") and (v.Name == "Money" or v.Name == "Cash" or v.Text:find("%$")) then
-                     -- Очищаем текст от $ и запятых
-                    local cleanText = v.Text:gsub("%$", ""):gsub(",", "")
-                    local num = tonumber(cleanText)
-                    if num and num >= 0 then
-                        info.Cash = num
-                        found = true
-                        break -- Нашли, выходим
-                    end
-                end
-            end
-        end
-        
-        -- Запасной вариант (если GUI не найден), берем Value только если оно положительное
-        if not found and Player:FindFirstChild("Cash") and Player.Cash.Value >= 0 then
-            info.Cash = Player.Cash.Value
-        end
-    end)
-    
     return info
 end
 
@@ -158,4 +161,4 @@ task.spawn(function()
         end
     end
 end)
-print("✅ COMBAT SCRIPT: GUI READ FIX")
+print("✅ COMBAT SCRIPT: SCREEN READER ACTIVE")
