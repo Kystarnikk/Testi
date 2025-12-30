@@ -1,3 +1,5 @@
+print("🔥 ЗАПУСК СКРИПТА... ЕСЛИ ВИДИШЬ ЭТО - ОН ЖИВ 🔥")
+
 local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -9,7 +11,7 @@ local SERVER_URL = "http://127.0.0.1:5000"
 local request_func = (syn and syn.request) or (http and http.request) or (http_request) or (fluxus and fluxus.request) or request
 local Remote = ReplicatedStorage:WaitForChild("RemoteFunction")
 
--- == CONFIG ==
+-- == CONFIG LOADER ==
 local MatchConfig = {mode = "Easy", autoskip = false}
 task.spawn(function()
     if request_func then
@@ -23,20 +25,21 @@ task.spawn(function()
     end
 end)
 
--- == GUI ==
+-- == GUI CREATION ==
 local PlayerGui = Player:WaitForChild("PlayerGui")
 if PlayerGui:FindFirstChild("TDS_MatchHub") then PlayerGui.TDS_MatchHub:Destroy() end
 local ScreenGui = Instance.new("ScreenGui"); ScreenGui.Name = "TDS_MatchHub"; ScreenGui.Parent = PlayerGui; ScreenGui.ResetOnSpawn = false
 local MainFrame = Instance.new("Frame"); MainFrame.Size = UDim2.new(0, 220, 0, 130); MainFrame.Position = UDim2.new(0, 20, 0.5, -65); MainFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 30); MainFrame.Parent = ScreenGui; Instance.new("UICorner", MainFrame).CornerRadius = UDim.new(0, 8)
 local InfoLabel = Instance.new("TextLabel"); InfoLabel.Size = UDim2.new(1, -20, 0, 60); InfoLabel.Position = UDim2.new(0, 10, 0, 40); InfoLabel.BackgroundTransparency = 1; InfoLabel.TextColor3 = Color3.fromRGB(200, 200, 200); InfoLabel.Font = Enum.Font.Gotham; InfoLabel.TextSize = 12; InfoLabel.TextXAlignment = Enum.TextXAlignment.Left; InfoLabel.Parent = MainFrame
 
+-- Dragging
 local dragging, dragInput, dragStart, startPos
 MainFrame.InputBegan:Connect(function(i) if i.UserInputType==Enum.UserInputType.MouseButton1 then dragging=true;dragStart=i.Position;startPos=MainFrame.Position end end)
 MainFrame.InputChanged:Connect(function(i) if i.UserInputType==Enum.UserInputType.MouseMovement then dragInput=i end end)
 UserInputService.InputChanged:Connect(function(i) if dragging and i==dragInput then local d=i.Position-dragStart;MainFrame.Position=UDim2.new(startPos.X.Scale,startPos.X.Offset+d.X,startPos.Y.Scale,startPos.Y.Offset+d.Y) end end)
 UserInputService.InputEnded:Connect(function(i) if i.UserInputType==Enum.UserInputType.MouseButton1 then dragging=false end end)
 
--- == DATA ==
+-- == DATA COLLECTORS ==
 local pathNodes = {}
 local function cachePaths()
     local map = Workspace:FindFirstChild("Map")
@@ -69,64 +72,71 @@ local function getTowers()
     return t
 end
 
--- == STATS FIX ==
+-- == HYBRID STATS SYSTEM (TANK MODE) ==
 local function getStats()
-    local info = {Wave="WAITING...", Health=0, Cash=0}
+    local info = {Wave="Loading...", Health=0, Cash=0}
     
+    -- БЛОК 1: ВНУТРЕННИЕ ДАННЫЕ (ReplicatedStorage) - Для Волн и ХП
+    -- Это работает всегда, даже если GUI скрыт
     pcall(function()
-        local h = PlayerGui:FindFirstChild("ReactUniversalHotbar")
-        if h and h:FindFirstChild("Frame") then
-            -- 1. ДЕНЬГИ (Мы знаем, что это работает)
-            if h.Frame:FindFirstChild("values") and h.Frame.values:FindFirstChild("cash") then
-                 local txt = h.Frame.values.cash.amount.Text
-                 info.Cash = tonumber(txt:gsub("%$",""):gsub(",",""):gsub(" ","")) or 0
-            end
+        local State = ReplicatedStorage:FindFirstChild("State")
+        if State then
+            -- Волна
+            local curr = State:FindFirstChild("Wave") and State.Wave.Value or 0
+            local max = State:FindFirstChild("MaxWave") and State.MaxWave.Value 
+                        or State:FindFirstChild("SurvivalWave") and State.SurvivalWave.Value 
+                        or "?"
+            info.Wave = tostring(curr) .. " / " .. tostring(max)
             
-            -- 2. ВОЛНЫ (Попытка найти их в том же Hotbar)
-            -- Обычно структура такая: Frame -> values -> wave -> amount
-            -- ИЛИ: Frame -> info -> wave
-            if h.Frame:FindFirstChild("values") and h.Frame.values:FindFirstChild("wave") then
-                info.Wave = h.Frame.values.wave.amount.Text
-            elseif h.Frame:FindFirstChild("info") and h.Frame.info:FindFirstChild("wave") then
-                info.Wave = h.Frame.info.wave.Text
-            else
-                -- ЗАПАСНОЙ ВАРИАНТ: State
-                local State = ReplicatedStorage:FindFirstChild("State")
-                if State and State:FindFirstChild("Wave") then
-                     local w = State.Wave.Value
-                     local max = State:FindFirstChild("MaxWave") and State.MaxWave.Value or "?"
-                     info.Wave = w .. " / " .. max
-                end
-            end
-            
-            -- 3. HEALTH (Тоже ищем в Hotbar или State)
-            if h.Frame:FindFirstChild("values") and h.Frame.values:FindFirstChild("health") then
-                local ht = h.Frame.values.health.amount.Text
-                info.Health = tonumber(ht) or 0
-            else
-                local State = ReplicatedStorage:FindFirstChild("State")
-                if State and State:FindFirstChild("Health") then info.Health = State.Health.Current.Value end
+            -- Здоровье
+            if State:FindFirstChild("Health") and State.Health:FindFirstChild("Current") then
+                info.Health = State.Health.Current.Value
             end
         end
     end)
+    
+    -- БЛОК 2: GUI (PlayerGui) - Только для Денег
+    -- Если этот блок сломается, скрипт НЕ остановится, просто деньги будут 0
+    pcall(function()
+        local hotbar = PlayerGui:FindFirstChild("ReactUniversalHotbar")
+        if hotbar and hotbar:FindFirstChild("Frame") and hotbar.Frame:FindFirstChild("values") then
+            if hotbar.Frame.values:FindFirstChild("cash") then
+                local txt = hotbar.Frame.values.cash.amount.Text
+                -- Чистим текст от всего, кроме цифр
+                local clean = txt:gsub("%D", "") 
+                info.Cash = tonumber(clean) or 0
+            end
+        end
+    end)
+
     return info
 end
 
--- == LOOP ==
+-- == MAIN LOOP ==
 local lastSkip = 0
 task.spawn(function()
+    print("✅ ЦИКЛ ЗАПУЩЕН")
     while task.wait(0.1) do
-        local stats = getStats()
-        InfoLabel.Text = "Wave: " .. stats.Wave .. "\nHealth: " .. stats.Health .. "\nCash: $" .. stats.Cash
+        -- Оборачиваем весь цикл в pcall, чтобы одна ошибка не убила скрипт
+        local success, err = pcall(function()
+            local stats = getStats()
+            InfoLabel.Text = "Wave: " .. stats.Wave .. "\nHealth: " .. stats.Health .. "\nCash: $" .. stats.Cash
+            
+            -- Auto Skip
+            if MatchConfig.autoskip and tick()-lastSkip > 3 then
+                Remote:InvokeServer("Voting", "Skip"); lastSkip=tick()
+            end
+            
+            -- Sending Data
+            if request_func then
+                local payload = {Type="MATCH", Stats=stats, Enemies={}, Towers=getTowers()}
+                request_func({Url=SERVER_URL.."/match_data", Method="POST", Headers={["Content-Type"]="application/json"}, Body=HttpService:JSONEncode(payload)})
+            end
+        end)
         
-        if MatchConfig.autoskip and tick()-lastSkip > 3 then
-            Remote:InvokeServer("Voting", "Skip"); lastSkip=tick()
-        end
-        
-        if request_func then
-            local payload = {Type="MATCH", Stats=stats, Enemies={}, Towers=getTowers()}
-            pcall(function() request_func({Url=SERVER_URL.."/match_data", Method="POST", Headers={["Content-Type"]="application/json"}, Body=HttpService:JSONEncode(payload)}) end)
+        if not success then
+            warn("⚠️ ОШИБКА В ЦИКЛЕ: " .. tostring(err))
+            task.wait(1) -- Ждем секунду перед повтором, чтобы не крашнуть игру
         end
     end
 end)
-print("✅ COMBAT: UNIVERSAL HOTBAR FIX")
