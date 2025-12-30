@@ -99,38 +99,30 @@ local function getTowers()
     return my_towers
 end
 
--- == FINAL CASH LOGIC (HOTBAR TEXT) ==
 local function getGameStats()
     local info = {Wave=0, Health=0, Cash=0}
-    
-    -- 1. WAVE & HEALTH
     pcall(function()
         if State then
             if State:FindFirstChild("Wave") then info.Wave = State.Wave.Value end
             if State:FindFirstChild("Health") then info.Health = State.Health.Current.Value end
         end
     end)
-    
-    -- 2. CASH (Directly from ReactUniversalHotbar)
     pcall(function()
         local hotbar = PlayerGui:FindFirstChild("ReactUniversalHotbar")
         if hotbar and hotbar:FindFirstChild("Frame") then
-            -- Путь из твоего скриншота
             local amountLabel = hotbar.Frame.values.cash.amount
             if amountLabel and amountLabel:IsA("TextLabel") then
-                -- Чистим текст ($9,697 -> 9697)
                 local clean = amountLabel.Text:gsub("%$", ""):gsub(",", ""):gsub(" ", "")
                 local num = tonumber(clean)
                 if num then info.Cash = num end
             end
         end
     end)
-    
     return info
 end
 
 task.spawn(function()
-    while task.wait(0.3) do
+    while task.wait(0.1) do -- ЗАДЕРЖКА ТЕПЕРЬ 0.1 (БЫЛО 0.3)
         local stats = getGameStats()
         InfoLabel.Text = "Wave: " .. stats.Wave .. "\nHealth: " .. stats.Health .. "\nCash: $" .. stats.Cash
         
@@ -146,4 +138,4 @@ task.spawn(function()
         end
     end
 end)
-print("✅ COMBAT SCRIPT: HOTBAR LINKED")
+print("✅ COMBAT SCRIPT: TURBO MODE (0.1s)")
