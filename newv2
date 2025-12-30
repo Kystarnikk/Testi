@@ -1,6 +1,7 @@
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local HttpService = game:GetService("HttpService")
+local UserInputService = game:GetService("UserInputService")
 local Player = Players.LocalPlayer
 local SERVER_URL = "http://127.0.0.1:5000"
 local request_func = (syn and syn.request) or (http and http.request) or (http_request) or (fluxus and fluxus.request) or request
@@ -8,31 +9,27 @@ local Remote = ReplicatedStorage:WaitForChild("RemoteFunction")
 
 local LiveStats = {Wave = "0 / 0", Health = 0, Cash = 0}
 
--- ПЕРЕХВАТ ВОЛН
+-- === GUI БОЙ ===
+local ScreenGui = Instance.new("ScreenGui", Player.PlayerGui); ScreenGui.Name = "TDS_Combat"
+local Main = Instance.new("Frame", ScreenGui); Main.Size = UDim2.new(0, 180, 0, 100); Main.Position = UDim2.new(0, 20, 0.5, -50); Main.BackgroundColor3 = Color3.fromRGB(20, 20, 25)
+Instance.new("UICorner", Main).CornerRadius = UDim.new(0, 8)
+local Info = Instance.new("TextLabel", Main); Info.Size = UDim2.new(1, -20, 1, -10); Info.Position = UDim2.new(0, 10, 0, 5); Info.BackgroundTransparency = 1; Info.TextColor3 = Color3.new(1, 1, 1); Info.Font = Enum.Font.GothamMedium; Info.TextSize = 13; Info.TextXAlignment = Enum.TextXAlignment.Left; Info.Text = "Загрузка данных..."
+
+-- Перетаскивание
+local d, ds, sp; Main.InputBegan:Connect(function(i) if i.UserInputType==Enum.UserInputType.MouseButton1 then d=true;ds=i.Position;sp=Main.Position end end)
+UserInputService.InputChanged:Connect(function(i) if d and i.UserInputType==Enum.UserInputType.MouseMovement then local dl=i.Position-ds;Main.Position=UDim2.new(sp.X.Scale,sp.X.Offset+dl.X,sp.Y.Scale,sp.Y.Offset+dl.Y) end end)
+UserInputService.InputEnded:Connect(function(i) if i.UserInputType==Enum.UserInputType.MouseButton1 then d=false end end)
+
+-- ПЕРЕХВАТ ВОЛН (Твой путь)
 task.spawn(function()
     local sb = ReplicatedStorage:WaitForChild("Network"):WaitForChild("Sandbox")
     sb:WaitForChild("RE:SetStats").OnClientEvent:Connect(function(d)
         if type(d) == "table" then
-            local cur = d.Wave or 0
-            local max = d.MaxWave or (d.WavesLeft and cur + d.WavesLeft) or "?"
-            LiveStats.Wave = cur .. " / " .. max
-            if d.Health then LiveStats.Health = d.Health end
+            local cur = d.Wave or 0; local max = d.MaxWave or (d.WavesLeft and cur + d.WavesLeft) or "?"
+            LiveStats.Wave = cur .. " / " .. max; if d.Health then LiveStats.Health = d.Health end
         end
     end)
 end)
-
-local function getTowers()
-    local t = {}
-    if workspace:FindFirstChild("Towers") then
-        for _, v in ipairs(workspace.Towers:GetChildren()) do
-            if v:FindFirstChild("Owner") and v.Owner.Value == Player.UserId and v:FindFirstChild("Replicator") then
-                local a, r = v.Replicator:GetAttributes(), v:FindFirstChild("HumanoidRootPart")
-                if r then table.insert(t, {Name=v.Name, Level=a.Level or 0, Pos={x=math.floor(r.Position.X), z=math.floor(r.Position.Z)}, Stats={Cost=a.TotalInvestment or 0, DmgDealt=a.DamageDealt or 0}}) end
-            end
-        end
-    end
-    return t
-end
 
 local MatchConfig = {mode = "Easy", autoskip = false}
 task.spawn(function()
@@ -53,7 +50,8 @@ task.spawn(function()
             local h = Player.PlayerGui:FindFirstChild("ReactUniversalHotbar")
             if h then LiveStats.Cash = tonumber(h.Frame.values.cash.amount.Text:gsub("%D","")) or 0 end
         end)
+        Info.Text = "🌊 Волна: "..LiveStats.Wave.."\n❤️ ХП: "..LiveStats.Health.."\n💰 Деньги: $"..LiveStats.Cash
         if MatchConfig.autoskip and tick() - lastSkip > 3 then Remote:InvokeServer("Voting", "Skip"); lastSkip = tick() end
-        if request_func then pcall(function() request_func({Url=SERVER_URL.."/match_data", Method="POST", Headers={["Content-Type"]="application/json"}, Body=HttpService:JSONEncode({Stats=LiveStats, Towers=getTowers()})}) end) end
+        if request_func then pcall(function() request_func({Url=SERVER_URL.."/match_data", Method="POST", Headers={["Content-Type"]="application/json"}, Body=HttpService:JSONEncode({Stats=LiveStats, Towers={}})}) end) end
     end
 end)
