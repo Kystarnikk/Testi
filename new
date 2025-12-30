@@ -4,30 +4,22 @@ if not game:IsLoaded() then game.Loaded:Wait() end
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local HttpService = game:GetService("HttpService")
-local UserInputService = game:GetService("UserInputService")
 local Player = Players.LocalPlayer
 local PlayerGui = Player:WaitForChild("PlayerGui")
 
-local Remote = ReplicatedStorage:WaitForChild("RemoteFunction")
-local Network = ReplicatedStorage:WaitForChild("Network")
-local ElevatorsNet = Network:WaitForChild("Elevators")
-local EnterRemote = ElevatorsNet:WaitForChild("RF:Enter")
-
 local SERVER_URL = "http://127.0.0.1:5000"
-local inventory_data = {}
-local isSearching = false
 local request_func = (syn and syn.request) or (http and http.request) or (http_request) or (fluxus and fluxus.request) or request
 
 -- == GUI Setup ==
 if PlayerGui:FindFirstChild("TDS_LobbyHub") then PlayerGui.TDS_LobbyHub:Destroy() end
 local ScreenGui = Instance.new("ScreenGui", PlayerGui); ScreenGui.Name = "TDS_LobbyHub"
-local Main = Instance.new("Frame", ScreenGui); Main.Size = UDim2.new(0, 320, 0, 420); Main.Position = UDim2.new(0.5, -160, 0.5, -210); Main.BackgroundColor3 = Color3.fromRGB(18, 18, 22)
+local Main = Instance.new("Frame", ScreenGui); Main.Size = UDim2.new(0, 300, 0, 100); Main.Position = UDim2.new(0.5, -150, 0, 50); Main.BackgroundColor3 = Color3.fromRGB(25, 25, 30)
 Instance.new("UICorner", Main).CornerRadius = UDim.new(0, 8)
 
-local StatusLabel = Instance.new("TextLabel", Main); StatusLabel.Size = UDim2.new(1, 0, 0, 30); StatusLabel.Position = UDim2.new(0, 0, 0, 5); StatusLabel.BackgroundTransparency = 1; StatusLabel.Text = "Status: Waiting..."; StatusLabel.TextColor3 = Color3.new(1, 0.8, 0); StatusLabel.Font = Enum.Font.GothamBold; StatusLabel.TextSize = 12
+local StatusLabel = Instance.new("TextLabel", Main); StatusLabel.Size = UDim2.new(1, 0, 1, 0); StatusLabel.BackgroundTransparency = 1; StatusLabel.Text = "Status: Connecting..."; StatusLabel.TextColor3 = Color3.new(1, 1, 1); StatusLabel.Font = Enum.Font.GothamBold; StatusLabel.TextSize = 14
 
+-- == Functions ==
 local function sendUpdate()
-    -- Your specific paths for Level and Experience
     local stats = {
         Level = Player:FindFirstChild("Level") and Player.Level.Value or 0,
         Exp = Player:FindFirstChild("Experience") and Player.Experience.Value or 0,
@@ -43,17 +35,31 @@ local function sendUpdate()
                 Url = SERVER_URL .. "/update",
                 Method = "POST",
                 Headers = {["Content-Type"] = "application/json"},
-                Body = HttpService:JSONEncode({stats = stats, inventory = inventory_data})
+                Body = HttpService:JSONEncode({stats = stats})
             }) 
         end) 
     end
 end
 
--- Teleport and Inventory Logic remains the same as your functional version
--- ... (Inventory Check and Teleport Polling here) ...
+local function checkCommands()
+    if not request_func then return end
+    local success, response = pcall(function()
+        return request_func({Url = SERVER_URL .. "/get_cmd", Method = "GET"})
+    end)
 
+    if success and response.StatusCode == 200 then
+        local cmd = HttpService:JSONDecode(response.Body)
+        if cmd.pending then
+            StatusLabel.Text = "Status: Starting Game..."
+            -- Здесь можно добавить твой код для входа в лифт
+        end
+    end
+end
+
+-- == Loops ==
 task.spawn(function()
     while task.wait(5) do
         sendUpdate()
+        checkCommands()
     end
 end)
