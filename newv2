@@ -7,6 +7,36 @@ local Player = Players.LocalPlayer
 
 local SERVER_URL = "http://127.0.0.1:5000"
 local request_func = (syn and syn.request) or (http and http.request) or (http_request) or (fluxus and fluxus.request) or request
+local Remote = ReplicatedStorage:WaitForChild("RemoteFunction")
+
+-- == НАСТРОЙКИ МАТЧА (ЗАГРУЖАЮТСЯ С СЕРВЕРА) ==
+local MatchConfig = {mode = "Easy", autoskip = false}
+
+-- Функция получения настроек от Питона
+local function fetchMatchConfig()
+    if request_func then
+        local s, r = pcall(function() return request_func({Url=SERVER_URL.."/get_match_config", Method="GET"}) end)
+        if s and r.StatusCode == 200 then
+            local data = HttpService:JSONDecode(r.Body)
+            MatchConfig.mode = data.mode
+            MatchConfig.autoskip = data.autoskip
+            print("✅ CONFIG LOADED: Mode="..MatchConfig.mode.." | AutoSkip="..tostring(MatchConfig.autoskip))
+            
+            -- СРАЗУ ГОЛОСУЕМ И ЖМЕМ ГОТОВНОСТЬ
+            task.spawn(function()
+                task.wait(1)
+                print("🗳️ Voting for: " .. MatchConfig.mode)
+                Remote:InvokeServer("Difficulty", "Vote", MatchConfig.mode)
+                task.wait(1)
+                print("✅ Pressing Ready...")
+                Remote:InvokeServer("Difficulty", "Ready")
+            end)
+        else
+            warn("❌ Failed to fetch match config")
+        end
+    end
+end
+task.spawn(fetchMatchConfig)
 
 -- == GUI SETUP ==
 local PlayerGui = Player:WaitForChild("PlayerGui")
@@ -19,7 +49,7 @@ local Title = Instance.new("TextLabel"); Title.Size = UDim2.new(1, -10, 1, 0); T
 local PyStatus = Instance.new("TextLabel"); PyStatus.Size = UDim2.new(1, -10, 0, 20); PyStatus.Position = UDim2.new(0, 10, 0, 35); PyStatus.BackgroundTransparency = 1; PyStatus.Text = "Connecting..."; PyStatus.TextColor3 = Color3.fromRGB(255, 255, 0); PyStatus.Font = Enum.Font.GothamBold; PyStatus.TextSize = 11; PyStatus.TextXAlignment = Enum.TextXAlignment.Left; PyStatus.Parent = MainFrame
 local InfoLabel = Instance.new("TextLabel"); InfoLabel.Size = UDim2.new(1, -20, 0, 60); InfoLabel.Position = UDim2.new(0, 10, 0, 60); InfoLabel.BackgroundTransparency = 1; InfoLabel.Text = "Wave: 0\nHealth: 0\nCash: 0"; InfoLabel.TextColor3 = Color3.fromRGB(200, 200, 200); InfoLabel.Font = Enum.Font.Gotham; InfoLabel.TextSize = 12; InfoLabel.TextXAlignment = Enum.TextXAlignment.Left; InfoLabel.TextYAlignment = Enum.TextYAlignment.Top; InfoLabel.Parent = MainFrame
 
--- == DRAG SYSTEM (ANTI-STICK) ==
+-- == DRAG SYSTEM ==
 local dragging, dragInput, dragStart, startPos
 local function update(input)
     local delta = input.Position - dragStart
@@ -74,7 +104,6 @@ local function getEnemies()
     return enemies_data
 end
 
--- == MEGA TOWER STATS ==
 local function getTowers()
     local my_towers = {}
     local towersFolder = Workspace:FindFirstChild("Towers")
@@ -84,10 +113,8 @@ local function getTowers()
             if ownerVal and ownerVal.Value == Player.UserId then
                 local root = tower:FindFirstChild("HumanoidRootPart")
                 local replicator = tower:FindFirstChild("Replicator")
-                
                 if root and replicator then
                     local attr = replicator:GetAttributes()
-                    
                     local level = attr["Level"] or 0
                     local dmgDealt = attr["DamageDealt"] or 0
                     local investment = attr["TotalInvestment"] or 0
@@ -95,18 +122,14 @@ local function getTowers()
                     local currDmg = attr["Damage"] or 0
                     local range = attr["Range"] or 0
                     local cooldown = attr["Firerate"] or 0
-                    
                     local upgCost = "Full"
                     if level < 5 then upgCost = attr["NextUpgradeCost"] or "Unknown" end
-
                     local bonuses = {}
                     if attr["Camo"] or attr["Hidden"] then table.insert(bonuses, "Hidden") end
                     if attr["Flying"] or attr["Lead"] then table.insert(bonuses, "Flying") end
                     if #bonuses == 0 then table.insert(bonuses, "None") end
-
                     table.insert(my_towers, {
-                        Name = tower.Name,
-                        Level = level,
+                        Name = tower.Name, Level = level,
                         Pos = {x = math.floor(root.Position.X), y = math.floor(root.Position.Y), z = math.floor(root.Position.Z)},
                         Stats = {
                             DmgDealt = dmgDealt, Sell = sellPrice, Cost = investment,
@@ -121,7 +144,6 @@ local function getTowers()
     return my_towers
 end
 
--- == CASH FIX (HOTBAR) ==
 local function getGameStats()
     local info = {Wave=0, Health=0, Cash=0}
     pcall(function()
@@ -144,11 +166,23 @@ local function getGameStats()
     return info
 end
 
+-- == MAIN LOOP (DATA + AUTO SKIP) ==
+local lastSkip = 0
+
 task.spawn(function()
     while task.wait(0.1) do
         local stats = getGameStats()
         InfoLabel.Text = "Wave: " .. stats.Wave .. "\nHealth: " .. stats.Health .. "\nCash: $" .. stats.Cash
         
+        -- AUTO SKIP LOGIC
+        if MatchConfig.autoskip then
+            -- Жмем скип раз в 3 секунды, чтобы не спамить
+            if tick() - lastSkip > 3 then
+                Remote:InvokeServer("Voting", "Skip")
+                lastSkip = tick()
+            end
+        end
+
         if request_func then
             local payload = {Type = "MATCH_UPDATE", Stats = stats, Enemies = getEnemies(), Towers = getTowers()}
             local s, r = pcall(function() return request_func({Url=SERVER_URL.."/match_data", Method="POST", Headers={["Content-Type"]="application/json"}, Body=HttpService:JSONEncode(payload)}) end)
@@ -161,4 +195,4 @@ task.spawn(function()
         end
     end
 end)
-print("✅ COMBAT SCRIPT: TURBO + HOTBAR + MEGASTATS")
+print("✅ COMBAT SCRIPT: READY & SKIP ENABLED")
