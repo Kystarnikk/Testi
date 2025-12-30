@@ -1,106 +1,149 @@
-local towers = {"Scout", "Paintballer", "Sniper", "Demoman", "Hunter", "Soldier", "Militant", "Crook Boss", "Freezer", "Assassin", "Shotgunner", "Pyromancer", "Ace Pilot", "Medic", "Farm", "Rocketeer", "Trapper", "Military Base", "Mortar", "Turret", "Mercenary Base", "Electroshocker", "Warden", "Cowboy", "Commander", "DJ Booth", "Minigunner", "Ranger", "Pursuit", "Gatling Gun", "Brawler", "Necromancer", "Accelerator", "Engineer", "Hacker", "Snowballer", "Executioner", "Swarmer"}
+local towers = {
+    "Scout", "Paintballer", "Sniper", "Demoman", "Hunter", "Soldier", "Militant", "Crook Boss", "Freezer", "Assassin", 
+    "Shotgunner", "Pyromancer", "Ace Pilot", "Medic", "Farm", "Rocketeer", "Trapper", "Military Base", "Mortar", "Turret", 
+    "Mercenary Base", "Electroshocker", "Warden", "Cowboy", "Commander", "DJ Booth", "Minigunner", "Ranger", "Pursuit", 
+    "Gatling Gun", "Brawler", "Necromancer", "Accelerator", "Engineer", "Hacker", "Snowballer", "Executioner", "Swarmer"
+}
+
+if not game:IsLoaded() then game.Loaded:Wait() end
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local HttpService = game:GetService("HttpService")
 local UserInputService = game:GetService("UserInputService")
 local Player = Players.LocalPlayer
-local Remote = ReplicatedStorage:WaitForChild("RemoteFunction")
-local SERVER_URL = "http://127.0.0.1:5000"
-local request_func = (syn and syn.request) or (http and http.request) or (http_request) or (fluxus and fluxus.request) or request
+local PlayerGui = Player:WaitForChild("PlayerGui")
 
--- == ELEVATOR REMOTES ==
+local Remote = ReplicatedStorage:WaitForChild("RemoteFunction")
 local Network = ReplicatedStorage:WaitForChild("Network")
 local ElevatorsNet = Network:WaitForChild("Elevators")
 local EnterRemote = ElevatorsNet:WaitForChild("RF:Enter")
+local SetSizeRemote = ElevatorsNet:WaitForChild("RF:SetSize")
+local GetSizesRemote = ElevatorsNet:WaitForChild("RF:GetSizes")
 
--- === GUI SETUP ===
-local ScreenGui = Instance.new("ScreenGui", Player.PlayerGui); ScreenGui.Name = "TDS_Lobby_Hub"
-local Main = Instance.new("Frame", ScreenGui); Main.Size = UDim2.new(0, 250, 0, 380); Main.Position = UDim2.new(1, -260, 0.5, -190); Main.BackgroundColor3 = Color3.fromRGB(25, 25, 30)
-Instance.new("UICorner", Main).CornerRadius = UDim.new(0, 10)
+local SERVER_URL = "http://127.0.0.1:5000"
+local inventory_data = {}
+local isSearching = false
+local request_func = (syn and syn.request) or (http and http.request) or (http_request) or (fluxus and fluxus.request) or request
 
-local Header = Instance.new("Frame", Main); Header.Size = UDim2.new(1, 0, 0, 40); Header.BackgroundColor3 = Color3.fromRGB(35, 35, 45)
-Instance.new("UICorner", Header).CornerRadius = UDim.new(0, 10)
-local Title = Instance.new("TextLabel", Header); Title.Size = UDim2.new(1, 0, 1, 0); Title.Text = "TDS BOT LOBBY"; Title.TextColor3 = Color3.new(1, 1, 1); Title.Font = Enum.Font.GothamBold; Title.BackgroundTransparency = 1; Title.TextSize = 14
-
-local Status = Instance.new("TextLabel", Main); Status.Size = UDim2.new(1, 0, 0, 20); Status.Position = UDim2.new(0, 0, 0, 45); Status.Text = "Status: Waiting..."; Status.TextColor3 = Color3.new(1, 0.8, 0); Status.Font = Enum.Font.Gotham; Status.TextSize = 11; Status.BackgroundTransparency = 1
-
-local Scroll = Instance.new("ScrollingFrame", Main); Scroll.Size = UDim2.new(1, -20, 0, 260); Scroll.Position = UDim2.new(0, 10, 0, 70); Scroll.BackgroundTransparency = 0.9; Scroll.CanvasSize = UDim2.new(0, 0, 0, 1050); Scroll.ScrollBarThickness = 2
-
-local rows = {}
-for i, name in ipairs(towers) do
-    local R = Instance.new("Frame", Scroll); R.Size = UDim2.new(1, 0, 0, 25); R.Position = UDim2.new(0, 0, 0, (i-1)*27); R.BackgroundTransparency = 1
-    local T = Instance.new("TextLabel", R); T.Size = UDim2.new(0.8, 0, 1, 0); T.Text = name; T.TextColor3 = Color3.new(0.7, 0.7, 0.7); T.BackgroundTransparency = 1; T.TextXAlignment = Enum.TextXAlignment.Left; T.Position = UDim2.new(0, 5, 0, 0)
-    local I = Instance.new("TextLabel", R); I.Size = UDim2.new(0, 20, 0, 20); I.Position = UDim2.new(1, -25, 0, 2); I.Text = "-"; I.BackgroundTransparency = 1; I.TextColor3 = Color3.new(1, 1, 1)
-    rows[name] = I
-end
+-- GUI Setup
+if PlayerGui:FindFirstChild("TDS_LobbyHub") then PlayerGui.TDS_LobbyHub:Destroy() end
+local ScreenGui = Instance.new("ScreenGui"); ScreenGui.Name = "TDS_LobbyHub"; ScreenGui.Parent = PlayerGui; ScreenGui.ResetOnSpawn = false
+local Main = Instance.new("Frame"); Main.Size = UDim2.new(0, 320, 0, 420); Main.Position = UDim2.new(0.5, -160, 0.5, -210); Main.BackgroundColor3 = Color3.fromRGB(18, 18, 22); Main.Parent = ScreenGui; Instance.new("UICorner", Main).CornerRadius = UDim.new(0, 8)
+local TopBar = Instance.new("Frame"); TopBar.Size = UDim2.new(1, 0, 0, 35); TopBar.BackgroundColor3 = Color3.fromRGB(25, 25, 30); TopBar.Parent = Main; Instance.new("UICorner", TopBar).CornerRadius = UDim.new(0, 8)
+local Title = Instance.new("TextLabel"); Title.Size = UDim2.new(1, -40, 1, 0); Title.Position = UDim2.new(0, 12, 0, 0); Title.BackgroundTransparency = 1; Title.Text = "TDS LOBBY BOT"; Title.TextColor3 = Color3.new(1,1,1); Title.Font = Enum.Font.GothamBold; Title.TextSize = 14; Title.TextXAlignment = Enum.TextXAlignment.Left; Title.Parent = TopBar
+local StatusLabel = Instance.new("TextLabel", TopBar);StatusLabel.Size=UDim2.new(1,-80,1,0);StatusLabel.Position=UDim2.new(0,35,0,0);StatusLabel.BackgroundTransparency=1;StatusLabel.Text="Waiting...";StatusLabel.TextColor3=Color3.new(1,0.8,0);StatusLabel.Font=Enum.Font.GothamBold;StatusLabel.TextSize=11
 
 -- Dragging
-local d, ds, sp; Main.InputBegan:Connect(function(i) if i.UserInputType==Enum.UserInputType.MouseButton1 then d=true;ds=i.Position;sp=Main.Position end end)
-UserInputService.InputChanged:Connect(function(i) if d and i.UserInputType==Enum.UserInputType.MouseMovement then local dl=i.Position-ds;Main.Position=UDim2.new(sp.X.Scale,sp.X.Offset+dl.X,sp.Y.Scale,sp.Y.Offset+dl.Y) end end)
-UserInputService.InputEnded:Connect(function(i) if i.UserInputType==Enum.UserInputType.MouseButton1 then d=false end end)
+local dragging, dragInput, dragStart, startPos
+TopBar.InputBegan:Connect(function(i) if i.UserInputType==Enum.UserInputType.MouseButton1 then dragging=true;dragStart=i.Position;startPos=Main.Position end end)
+TopBar.InputChanged:Connect(function(i) if i.UserInputType==Enum.UserInputType.MouseMovement then dragInput=i end end)
+UserInputService.InputChanged:Connect(function(i) if dragging and i==dragInput then local d=i.Position-dragStart;Main.Position=UDim2.new(startPos.X.Scale,startPos.X.Offset+d.X,startPos.Y.Scale,startPos.Y.Offset+d.Y) end end)
+UserInputService.InputEnded:Connect(function(i) if i.UserInputType==Enum.UserInputType.MouseButton1 then dragging=false end end)
 
--- === LOGIC: INVENTORY ===
-local function checkInventory()
-    repeat task.wait(1) until Player:FindFirstChild("Level")
-    Status.Text = "Status: Checking Inventory..."; local inv = {}
-    for _, n in ipairs(towers) do pcall(function() Remote:InvokeServer("Inventory", "Unequip", "tower", n) end) end
-    for _, n in ipairs(towers) do
-        local s, r = pcall(function() return Remote:InvokeServer("Inventory", "Equip", "tower", n) end)
-        local has = (s and r ~= false); inv[n] = has
-        if rows[n] then rows[n].Text = has and "OK" or "X"; rows[n].TextColor3 = has and Color3.new(0,1,0) or Color3.new(1,0,0) end
-        task.wait(0.02)
-    end
-    local stats = {Triumphs=Player.Triumphs.Value, Loses=Player.Loses.Value, Coins=Player.Coins.Value, Gems=Player.Gems.Value, Level=Player.Level.Value}
-    if request_func then pcall(function() request_func({Url=SERVER_URL.."/update", Method="POST", Headers={["Content-Type"]="application/json"}, Body=HttpService:JSONEncode({stats=stats, inventory=inv})}) end) end
-    Status.Text = "Status: Connected to Python"; Status.TextColor3 = Color3.new(0,1,0)
+-- Inventory GUI
+local InvP = Instance.new("Frame",Main);InvP.Size=UDim2.new(1,0,1,-40);InvP.Position=UDim2.new(0,0,0,40);InvP.BackgroundTransparency=1
+local Scroll = Instance.new("ScrollingFrame", InvP);Scroll.Size=UDim2.new(1,-8,1,-10);Scroll.Position=UDim2.new(0,4,0,5);Scroll.BackgroundTransparency=1;Scroll.ScrollBarThickness=2;Scroll.Active=true
+local ListLayout = Instance.new("UIListLayout", Scroll);ListLayout.Padding=UDim.new(0,4)
+ListLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function() Scroll.CanvasSize=UDim2.new(0,0,0,ListLayout.AbsoluteContentSize.Y+10) end)
+
+local rows = {}
+for _, name in ipairs(towers) do
+    local R=Instance.new("Frame",Scroll);R.Size=UDim2.new(1,-6,0,28);R.BackgroundColor3=Color3.fromRGB(28,28,32);Instance.new("UICorner",R).CornerRadius=UDim.new(0,4)
+    local T=Instance.new("TextLabel",R);T.Size=UDim2.new(0.7,0,1,0);T.Position=UDim2.new(0,10,0,0);T.BackgroundTransparency=1;T.Text=name;T.TextColor3=Color3.fromRGB(200,200,200);T.Font=Enum.Font.GothamBold;T.TextSize=11;T.TextXAlignment=Enum.TextXAlignment.Left
+    local I=Instance.new("ImageLabel",R);I.Size=UDim2.new(0,16,0,16);I.Position=UDim2.new(1,-26,0.5,-8);I.BackgroundTransparency=1;I.Image="rbxassetid://6034791557"
+    rows[name]={Stat=I, Row=R}
 end
 
--- === LOGIC: TELEPORT ===
-local isSearching = false
+local function sendUpdate()
+    task.spawn(function()
+        local stats = {
+            Triumphs = Player:FindFirstChild("Triumphs") and Player.Triumphs.Value or 0,
+            Loses = Player:FindFirstChild("Loses") and Player.Loses.Value or 0,
+            Coins = Player:FindFirstChild("Coins") and Player.Coins.Value or 0,
+            Gems = Player:FindFirstChild("Gems") and Player.Gems.Value or 0,
+            Level = Player.Level.Value
+        }
+        local payload = {stats=stats, inventory=inventory_data}
+        if request_func then pcall(function() request_func({Url=SERVER_URL.."/update",Method="POST",Headers={["Content-Type"]="application/json"},Body=HttpService:JSONEncode(payload)}) end) end
+    end)
+end
+
+local function unequipAll() for _, n in ipairs(towers) do task.spawn(function() pcall(function() Remote:InvokeServer("Inventory", "Unequip", "tower", n) end) end) end end
+
+local function StartCheck()
+    if not Remote then return end
+    unequipAll(); task.wait(1)
+    for _, name in ipairs(towers) do
+        if rows[name] then rows[name].Stat.ImageColor3=Color3.fromRGB(255,255,0) end
+        local s, r = pcall(function() return Remote:InvokeServer("Inventory","Equip","tower",name) end)
+        local has = (s and r ~= false)
+        inventory_data[name] = has
+        if rows[name] then rows[name].Stat.Image=has and "rbxassetid://6031068426" or "rbxassetid://6031094678"; rows[name].Stat.ImageColor3=has and Color3.fromRGB(0,255,100) or Color3.fromRGB(255,60,60) end
+        task.wait(0.05)
+    end
+    unequipAll(); sendUpdate()
+end
+
 local function pollCommands()
-    if isSearching then return end
     task.spawn(function()
         if not request_func then return end
         local success, res = pcall(function() return request_func({Url=SERVER_URL.."/get_cmd", Method="GET"}) end)
         if success and res.StatusCode == 200 then
             local data = HttpService:JSONDecode(res.Body)
-            if data.pending then
+            
+            if data.stop_signal then if isSearching then isSearching=false; StatusLabel.Text="⛔ STOPPED" end return end
+
+            if data.pending and not isSearching then
                 isSearching = true
-                local targetMap = data.map
-                local targetCat = data.category
-                Status.Text = "Searching Lift: " .. targetMap
-                
+                local targetMap, targetCat = data.map, data.category
+                StatusLabel.Text = "🔍 Searching: " .. (targetMap == "RANDOM" and "Smart ("..targetCat..")" or targetMap)
+
                 while isSearching do
+                    local validElevators = {}
                     for _, elev in ipairs(workspace:WaitForChild("Elevators"):GetChildren()) do
                         pcall(function()
                             local surface = elev.Screen.SurfaceGui.content
-                            local players = surface.timer.players.Text
-                            local isFree = (players == "0/4" or players == "0/1") and surface.timer.state.Text ~= "Teleporting"
-                            
-                            local mapFound = false
-                            if targetMap == "RANDOM" then
-                                if surface.mode.Text:upper() == targetCat:upper() then mapFound = true end
-                            else
-                                if surface.title.Text == targetMap then mapFound = true end
-                            end
-
-                            if isFree and mapFound then
-                                Status.Text = "Found Elevator! Joining..."
-                                local root = Player.Character and Player.Character:FindFirstChild("HumanoidRootPart")
-                                if root then root.CFrame = elev.Touch.CFrame + Vector3.new(0,3,0) end
-                                task.wait(0.5)
-                                EnterRemote:InvokeServer(elev)
-                                isSearching = false
+                            local isFree = (surface.timer.players.Text=="0/4" or surface.timer.players.Text=="0/1") and surface.timer.state.Text~="Teleporting"
+                            if isFree then
+                                if targetMap == "RANDOM" then if surface.mode.Text:upper() == targetCat:upper() then table.insert(validElevators, elev) end
+                                else if surface.title.Text == targetMap then table.insert(validElevators, elev) end end
                             end
                         end)
-                        if not isSearching then break end
                     end
+                    
+                    if #validElevators > 0 then
+                        local chosen = validElevators[math.random(1, #validElevators)]
+                        StatusLabel.Text = "✅ Found! Teleporting..."
+                        
+                        if chosen:FindFirstChild("Touch") and Player.Character and Player.Character:FindFirstChild("HumanoidRootPart") then
+                            local root = Player.Character.HumanoidRootPart
+                            local targetCF = chosen.Touch.CFrame + Vector3.new(0, 2, 0)
+                            local attempts = 0
+                            repeat
+                                root.CFrame = targetCF; task.wait(0.1); attempts=attempts+1
+                            until (root.Position - targetCF.Position).Magnitude < 5 or attempts > 15
+                        end
+                        
+                        task.wait(0.5)
+                        pcall(function() GetSizesRemote:InvokeServer() end)
+                        task.wait(0.2)
+                        pcall(function() SetSizeRemote:InvokeServer(unpack({1})) end)
+                        task.wait(0.2)
+                        
+                        EnterRemote:InvokeServer(chosen)
+                        isSearching = false; StatusLabel.Text = "🚀 Entering..."; break
+                    end
+                    
+                    local stopCheck = pcall(function() local chk = request_func({Url=SERVER_URL.."/get_cmd", Method="GET"}) if HttpService:JSONDecode(chk.Body).stop_signal then isSearching = false end end)
+                    if not isSearching then break end
                     task.wait(1.5)
                 end
+                if not isSearching and StatusLabel.Text ~= "🚀 Entering..." then StatusLabel.Text = "⛔ Cancelled" end
             end
         end
     end)
 end
 
-task.spawn(checkInventory)
+task.spawn(function() task.wait(3); StartCheck() end)
+task.spawn(function() while task.wait(5) do sendUpdate() end end)
 task.spawn(function() while task.wait(2) do pollCommands() end end)
