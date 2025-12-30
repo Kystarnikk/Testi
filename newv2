@@ -12,18 +12,45 @@ local request_func = (syn and syn.request) or (http and http.request) or (http_r
 local PlayerGui = Player:WaitForChild("PlayerGui")
 if PlayerGui:FindFirstChild("TDS_MatchHub") then PlayerGui.TDS_MatchHub:Destroy() end
 local ScreenGui = Instance.new("ScreenGui"); ScreenGui.Name = "TDS_MatchHub"; ScreenGui.Parent = PlayerGui; ScreenGui.ResetOnSpawn = false
+
 local MainFrame = Instance.new("Frame"); MainFrame.Size = UDim2.new(0, 220, 0, 130); MainFrame.Position = UDim2.new(0, 20, 0.5, -65); MainFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 30); MainFrame.Parent = ScreenGui; Instance.new("UICorner", MainFrame).CornerRadius = UDim.new(0, 8)
 local TopBar = Instance.new("Frame"); TopBar.Size = UDim2.new(1, 0, 0, 30); TopBar.BackgroundColor3 = Color3.fromRGB(35, 35, 40); TopBar.Parent = MainFrame; Instance.new("UICorner", TopBar).CornerRadius = UDim.new(0, 8)
 local Title = Instance.new("TextLabel"); Title.Size = UDim2.new(1, -10, 1, 0); Title.Position = UDim2.new(0, 10, 0, 0); Title.BackgroundTransparency = 1; Title.Text = "TDS COMBAT BOT"; Title.TextColor3 = Color3.fromRGB(255, 255, 255); Title.Font = Enum.Font.GothamBold; Title.TextSize = 12; Title.TextXAlignment = Enum.TextXAlignment.Left; Title.Parent = TopBar
 local PyStatus = Instance.new("TextLabel"); PyStatus.Size = UDim2.new(1, -10, 0, 20); PyStatus.Position = UDim2.new(0, 10, 0, 35); PyStatus.BackgroundTransparency = 1; PyStatus.Text = "Connecting..."; PyStatus.TextColor3 = Color3.fromRGB(255, 255, 0); PyStatus.Font = Enum.Font.GothamBold; PyStatus.TextSize = 11; PyStatus.TextXAlignment = Enum.TextXAlignment.Left; PyStatus.Parent = MainFrame
 local InfoLabel = Instance.new("TextLabel"); InfoLabel.Size = UDim2.new(1, -20, 0, 60); InfoLabel.Position = UDim2.new(0, 10, 0, 60); InfoLabel.BackgroundTransparency = 1; InfoLabel.Text = "Wave: 0\nHealth: 0\nCash: 0"; InfoLabel.TextColor3 = Color3.fromRGB(200, 200, 200); InfoLabel.Font = Enum.Font.Gotham; InfoLabel.TextSize = 12; InfoLabel.TextXAlignment = Enum.TextXAlignment.Left; InfoLabel.TextYAlignment = Enum.TextYAlignment.Top; InfoLabel.Parent = MainFrame
 
--- Dragging
+-- == FIXED DRAGGING (ИСПРАВЛЕННОЕ ПЕРЕТАСКИВАНИЕ) ==
 local dragging, dragInput, dragStart, startPos
-TopBar.InputBegan:Connect(function(i) if i.UserInputType==Enum.UserInputType.MouseButton1 then dragging=true;dragStart=i.Position;startPos=MainFrame.Position end end)
-TopBar.InputChanged:Connect(function(i) if i.UserInputType==Enum.UserInputType.MouseMovement then dragInput=i end end)
-UserInputService.InputChanged:Connect(function(i) if dragging and i==dragInput then local d=i.Position-dragStart;MainFrame.Position=UDim2.new(startPos.X.Scale,startPos.X.Offset+d.X,startPos.Y.Scale,startPos.Y.Offset+d.Y) end end)
 
+TopBar.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        dragging = true
+        dragStart = input.Position
+        startPos = MainFrame.Position
+    end
+end)
+
+TopBar.InputChanged:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseMovement then
+        dragInput = input
+    end
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+    if input == dragInput and dragging then
+        local delta = input.Position - dragStart
+        MainFrame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+    end
+end)
+
+-- Самое важное: Если отпустил мышку ГДЕ УГОДНО - перестаем тащить
+UserInputService.InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        dragging = false
+    end
+end)
+
+-- == DATA ==
 local State = ReplicatedStorage:WaitForChild("State", 10)
 local pathNodes = {}
 
@@ -88,38 +115,44 @@ local function getTowers()
     return my_towers
 end
 
--- === ИСПРАВЛЕННАЯ ФУНКЦИЯ ПОЛУЧЕНИЯ СТАТОВ ===
+-- == FIXED CASH (ИСПРАВЛЕННЫЕ ДЕНЬГИ) ==
 local function getGameStats()
     local info = {Wave=0, Health=0, Cash=0}
+    
+    -- 1. Wave & Health (From State)
     pcall(function()
-        -- 1. Wave & Health from State
         if State then
             if State:FindFirstChild("Wave") then info.Wave = State.Wave.Value end
             if State:FindFirstChild("Health") then info.Health = State.Health.Current.Value end
         end
-        
-        -- 2. CASH FIX (Проверяем все возможные варианты)
-        -- Вариант А: Leaderstats (Часто используется в матчах)
-        if Player:FindFirstChild("leaderstats") and Player.leaderstats:FindFirstChild("Cash") then
-            info.Cash = Player.leaderstats.Cash.Value
-        
-        -- Вариант Б: Твой путь
-        elseif Player:FindFirstChild("Cash") then 
+    end)
+    
+    -- 2. Cash (Проверяем все возможные места)
+    pcall(function()
+        -- Способ 1: Leaderstats (Стандарт роблокса, то что в углу экрана)
+        if Player:FindFirstChild("leaderstats") then
+            local ls = Player.leaderstats
+            if ls:FindFirstChild("Cash") then info.Cash = ls.Cash.Value 
+            elseif ls:FindFirstChild("Money") then info.Cash = ls.Money.Value end
+            
+        -- Способ 2: Твой путь (Прямо в игроке)
+        elseif Player:FindFirstChild("Cash") then
             info.Cash = Player.Cash.Value
             
-        -- Вариант В: GUI (Самый надежный запасной вариант)
+        -- Способ 3: GUI (Запасной вариант)
         else
             local gui = PlayerGui:FindFirstChild("GameGui")
             if gui then
                 local cashObj = gui:FindFirstChild("Money", true) or gui:FindFirstChild("Cash", true)
                 if cashObj and cashObj:IsA("TextLabel") then
-                    -- Удаляем знак $ и запятые, чтобы получить чистое число
+                    -- Убираем $ и запятые
                     local txt = cashObj.Text:gsub("%$", ""):gsub(",", "")
                     info.Cash = tonumber(txt) or 0
                 end
             end
         end
     end)
+    
     return info
 end
 
@@ -140,4 +173,4 @@ task.spawn(function()
         end
     end
 end)
-print("✅ COMBAT SCRIPT RELOADED")
+print("✅ COMBAT SCRIPT FIXED v3")
