@@ -1,139 +1,59 @@
 local Players = game:GetService("Players")
-local Workspace = game:GetService("Workspace")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local HttpService = game:GetService("HttpService")
-local UserInputService = game:GetService("UserInputService")
 local Player = Players.LocalPlayer
-
 local SERVER_URL = "http://127.0.0.1:5000"
 local request_func = (syn and syn.request) or (http and http.request) or (http_request) or (fluxus and fluxus.request) or request
-local RemoteFunction = ReplicatedStorage:WaitForChild("RemoteFunction")
+local Remote = ReplicatedStorage:WaitForChild("RemoteFunction")
 
--- == ПЕРЕМЕННЫЕ ДЛЯ СТАТОВ ==
-local Stats = {
-    Wave = "Waiting...",
-    Health = 0,
-    Cash = 0
-}
+local LiveStats = {Wave = "0 / 0", Health = 0, Cash = 0}
 
--- == 1. СЛУШАЕМ RE:SetStats (ВОЛНЫ И ХП) ==
+-- ПЕРЕХВАТ ВОЛН
 task.spawn(function()
-    -- Пытаемся найти этот ивент. Если путь изменится, скрипт не умрет, но волны не будет.
-    local success, Network = pcall(function() return ReplicatedStorage:WaitForChild("Network") end)
-    if success and Network then
-        local Sandbox = Network:FindFirstChild("Sandbox")
-        if Sandbox then
-            local SetStats = Sandbox:FindFirstChild("RE:SetStats")
-            if SetStats then
-                SetStats.OnClientEvent:Connect(function(data)
-                    if type(data) == "table" then
-                        local w = data.Wave or "?"
-                        local max = data.MaxWave or "?"
-                        -- Логика: Если есть WavesLeft, прибавляем к текущей
-                        if data.WavesLeft and tonumber(w) then 
-                            max = tonumber(w) + data.WavesLeft 
-                        end
-                        
-                        Stats.Wave = tostring(w) .. " / " .. tostring(max)
-                        
-                        if data.Health then Stats.Health = data.Health end
-                    end
-                end)
-            end
-        end
-    end
-end)
-
--- == 2. GUI (ВИЗУАЛ) ==
-local PlayerGui = Player:WaitForChild("PlayerGui")
-if PlayerGui:FindFirstChild("TDS_MatchHub") then PlayerGui.TDS_MatchHub:Destroy() end
-local ScreenGui = Instance.new("ScreenGui"); ScreenGui.Name = "TDS_MatchHub"; ScreenGui.Parent = PlayerGui; ScreenGui.ResetOnSpawn = false
-local MainFrame = Instance.new("Frame"); MainFrame.Size = UDim2.new(0, 200, 0, 90); MainFrame.Position = UDim2.new(0, 20, 0.5, 0); MainFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 25); MainFrame.Parent = ScreenGui; Instance.new("UICorner", MainFrame).CornerRadius = UDim.new(0, 8)
-local InfoLabel = Instance.new("TextLabel"); InfoLabel.Size = UDim2.new(1, -20, 1, -10); InfoLabel.Position = UDim2.new(0, 10, 0, 5); InfoLabel.BackgroundTransparency = 1; InfoLabel.TextColor3 = Color3.new(1, 1, 1); InfoLabel.Font = Enum.Font.GothamMedium; InfoLabel.TextSize = 13; InfoLabel.TextXAlignment = Enum.TextXAlignment.Left; InfoLabel.Parent = MainFrame
-
--- Перетаскивание
-local dragging, dragInput, dragStart, startPos
-MainFrame.InputBegan:Connect(function(i) if i.UserInputType==Enum.UserInputType.MouseButton1 then dragging=true;dragStart=i.Position;startPos=MainFrame.Position end end)
-MainFrame.InputChanged:Connect(function(i) if i.UserInputType==Enum.UserInputType.MouseMovement then dragInput=i end end)
-UserInputService.InputChanged:Connect(function(i) if dragging and i==dragInput then local d=i.Position-dragStart;MainFrame.Position=UDim2.new(startPos.X.Scale,startPos.X.Offset+d.X,startPos.Y.Scale,startPos.Y.Offset+d.Y) end end)
-UserInputService.InputEnded:Connect(function(i) if i.UserInputType==Enum.UserInputType.MouseButton1 then dragging=false end end)
-
--- == 3. ФУНКЦИИ СБОРА ==
-local function updateCash()
-    pcall(function()
-        local h = PlayerGui:FindFirstChild("ReactUniversalHotbar")
-        if h and h.Frame.values:FindFirstChild("cash") then
-            -- Чистим текст ($1,234 -> 1234)
-            local txt = h.Frame.values.cash.amount.Text
-            Stats.Cash = tonumber(txt:gsub("%D", "")) or Stats.Cash
+    local sb = ReplicatedStorage:WaitForChild("Network"):WaitForChild("Sandbox")
+    sb:WaitForChild("RE:SetStats").OnClientEvent:Connect(function(d)
+        if type(d) == "table" then
+            local cur = d.Wave or 0
+            local max = d.MaxWave or (d.WavesLeft and cur + d.WavesLeft) or "?"
+            LiveStats.Wave = cur .. " / " .. max
+            if d.Health then LiveStats.Health = d.Health end
         end
     end)
-end
+end)
 
 local function getTowers()
     local t = {}
-    pcall(function()
-        local f = Workspace:FindFirstChild("Towers")
-        if f then
-            for _, v in ipairs(f:GetChildren()) do
-                if v:FindFirstChild("Owner") and v.Owner.Value == Player.UserId and v:FindFirstChild("Replicator") then
-                    local a = v.Replicator:GetAttributes()
-                    local r = v:FindFirstChild("HumanoidRootPart")
-                    if r then
-                        table.insert(t, {
-                            Name = v.Name, Level = a["Level"] or 0,
-                            Pos = {x=math.floor(r.Position.X), z=math.floor(r.Position.Z)},
-                            Stats = {DmgDealt = a["DamageDealt"] or 0, Sell = math.floor((a["TotalInvestment"] or 0)*0.5), Cost = a["TotalInvestment"] or 0}
-                        })
-                    end
-                end
+    if workspace:FindFirstChild("Towers") then
+        for _, v in ipairs(workspace.Towers:GetChildren()) do
+            if v:FindFirstChild("Owner") and v.Owner.Value == Player.UserId and v:FindFirstChild("Replicator") then
+                local a, r = v.Replicator:GetAttributes(), v:FindFirstChild("HumanoidRootPart")
+                if r then table.insert(t, {Name=v.Name, Level=a.Level or 0, Pos={x=math.floor(r.Position.X), z=math.floor(r.Position.Z)}, Stats={Cost=a.TotalInvestment or 0, DmgDealt=a.DamageDealt or 0}}) end
             end
         end
-    end)
+    end
     return t
 end
 
--- == 4. ОСНОВНОЙ ЦИКЛ ==
-local lastSkip = 0
 local MatchConfig = {mode = "Easy", autoskip = false}
-
--- Получаем настройки при старте
 task.spawn(function()
     if request_func then
         local s, r = pcall(function() return request_func({Url=SERVER_URL.."/get_match_config", Method="GET"}) end)
-        if s and r.StatusCode == 200 then
+        if s then
             MatchConfig = HttpService:JSONDecode(r.Body)
-            task.wait(1.5)
-            RemoteFunction:InvokeServer("Difficulty", "Vote", MatchConfig.mode)
-            task.wait(1)
-            RemoteFunction:InvokeServer("Difficulty", "Ready")
+            task.wait(2); Remote:InvokeServer("Difficulty", "Vote", MatchConfig.mode)
+            task.wait(1); Remote:InvokeServer("Difficulty", "Ready")
         end
     end
 end)
 
+local lastSkip = 0
 task.spawn(function()
-    while task.wait(0.2) do
-        updateCash() -- Обновляем деньги
-        
-        InfoLabel.Text = string.format("🌊 Wave: %s\n❤️ HP: %d\n💰 Cash: $%d", Stats.Wave, Stats.Health, Stats.Cash)
-        
-        -- Авто Скип
-        if MatchConfig.autoskip and tick() - lastSkip > 3 then
-            RemoteFunction:InvokeServer("Voting", "Skip")
-            lastSkip = tick()
-        end
-
-        -- Отправка
-        if request_func then
-            local payload = {Type="MATCH", Stats=Stats, Towers=getTowers()}
-            pcall(function()
-                request_func({
-                    Url = SERVER_URL .. "/match_data",
-                    Method = "POST",
-                    Headers = {["Content-Type"] = "application/json"},
-                    Body = HttpService:JSONEncode(payload)
-                })
-            end)
-        end
+    while task.wait(0.5) do
+        pcall(function()
+            local h = Player.PlayerGui:FindFirstChild("ReactUniversalHotbar")
+            if h then LiveStats.Cash = tonumber(h.Frame.values.cash.amount.Text:gsub("%D","")) or 0 end
+        end)
+        if MatchConfig.autoskip and tick() - lastSkip > 3 then Remote:InvokeServer("Voting", "Skip"); lastSkip = tick() end
+        if request_func then pcall(function() request_func({Url=SERVER_URL.."/match_data", Method="POST", Headers={["Content-Type"]="application/json"}, Body=HttpService:JSONEncode({Stats=LiveStats, Towers=getTowers()})}) end) end
     end
 end)
