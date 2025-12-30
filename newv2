@@ -30,7 +30,6 @@ local ScreenGui = Instance.new("ScreenGui"); ScreenGui.Name = "TDS_MatchHub"; Sc
 local MainFrame = Instance.new("Frame"); MainFrame.Size = UDim2.new(0, 220, 0, 130); MainFrame.Position = UDim2.new(0, 20, 0.5, -65); MainFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 30); MainFrame.Parent = ScreenGui; Instance.new("UICorner", MainFrame).CornerRadius = UDim.new(0, 8)
 local InfoLabel = Instance.new("TextLabel"); InfoLabel.Size = UDim2.new(1, -20, 0, 60); InfoLabel.Position = UDim2.new(0, 10, 0, 40); InfoLabel.BackgroundTransparency = 1; InfoLabel.TextColor3 = Color3.fromRGB(200, 200, 200); InfoLabel.Font = Enum.Font.Gotham; InfoLabel.TextSize = 12; InfoLabel.TextXAlignment = Enum.TextXAlignment.Left; InfoLabel.Parent = MainFrame
 
--- Dragging
 local dragging, dragInput, dragStart, startPos
 MainFrame.InputBegan:Connect(function(i) if i.UserInputType==Enum.UserInputType.MouseButton1 then dragging=true;dragStart=i.Position;startPos=MainFrame.Position end end)
 MainFrame.InputChanged:Connect(function(i) if i.UserInputType==Enum.UserInputType.MouseMovement then dragInput=i end end)
@@ -38,7 +37,6 @@ UserInputService.InputChanged:Connect(function(i) if dragging and i==dragInput t
 UserInputService.InputEnded:Connect(function(i) if i.UserInputType==Enum.UserInputType.MouseButton1 then dragging=false end end)
 
 -- == DATA ==
-local State = ReplicatedStorage:WaitForChild("State", 10)
 local pathNodes = {}
 local function cachePaths()
     local map = Workspace:FindFirstChild("Map")
@@ -71,28 +69,44 @@ local function getTowers()
     return t
 end
 
+-- == STATS FIX ==
 local function getStats()
-    local info = {Wave="0", Health=0, Cash=0} -- Wave is string now
+    local info = {Wave="WAITING...", Health=0, Cash=0}
     
-    -- 1. WAVE (NORMAL TEXT FIX)
-    pcall(function()
-        local gui = PlayerGui:FindFirstChild("GameGui")
-        -- Ищем текст типа "Wave: 1/40" или просто счетчик волн
-        if gui and gui:FindFirstChild("Waves") and gui.Waves:FindFirstChild("TextLabel") then
-             info.Wave = gui.Waves.TextLabel.Text -- Берем "1 / 40"
-        elseif State and State:FindFirstChild("Wave") then
-             info.Wave = tostring(State.Wave.Value) -- Фолбэк на старое значение
-        end
-        
-        if State and State:FindFirstChild("Health") then info.Health = State.Health.Current.Value end
-    end)
-
-    -- 2. CASH (Hotbar Fix)
     pcall(function()
         local h = PlayerGui:FindFirstChild("ReactUniversalHotbar")
         if h and h:FindFirstChild("Frame") then
-            local txt = h.Frame.values.cash.amount.Text
-            info.Cash = tonumber(txt:gsub("%$",""):gsub(",",""):gsub(" ","")) or 0
+            -- 1. ДЕНЬГИ (Мы знаем, что это работает)
+            if h.Frame:FindFirstChild("values") and h.Frame.values:FindFirstChild("cash") then
+                 local txt = h.Frame.values.cash.amount.Text
+                 info.Cash = tonumber(txt:gsub("%$",""):gsub(",",""):gsub(" ","")) or 0
+            end
+            
+            -- 2. ВОЛНЫ (Попытка найти их в том же Hotbar)
+            -- Обычно структура такая: Frame -> values -> wave -> amount
+            -- ИЛИ: Frame -> info -> wave
+            if h.Frame:FindFirstChild("values") and h.Frame.values:FindFirstChild("wave") then
+                info.Wave = h.Frame.values.wave.amount.Text
+            elseif h.Frame:FindFirstChild("info") and h.Frame.info:FindFirstChild("wave") then
+                info.Wave = h.Frame.info.wave.Text
+            else
+                -- ЗАПАСНОЙ ВАРИАНТ: State
+                local State = ReplicatedStorage:FindFirstChild("State")
+                if State and State:FindFirstChild("Wave") then
+                     local w = State.Wave.Value
+                     local max = State:FindFirstChild("MaxWave") and State.MaxWave.Value or "?"
+                     info.Wave = w .. " / " .. max
+                end
+            end
+            
+            -- 3. HEALTH (Тоже ищем в Hotbar или State)
+            if h.Frame:FindFirstChild("values") and h.Frame.values:FindFirstChild("health") then
+                local ht = h.Frame.values.health.amount.Text
+                info.Health = tonumber(ht) or 0
+            else
+                local State = ReplicatedStorage:FindFirstChild("State")
+                if State and State:FindFirstChild("Health") then info.Health = State.Health.Current.Value end
+            end
         end
     end)
     return info
@@ -115,4 +129,4 @@ task.spawn(function()
         end
     end
 end)
-print("✅ COMBAT: MONITOR READY")
+print("✅ COMBAT: UNIVERSAL HOTBAR FIX")
