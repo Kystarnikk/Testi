@@ -1,57 +1,51 @@
+if not game:IsLoaded() then game.Loaded:Wait() end
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local HttpService = game:GetService("HttpService")
-local UserInputService = game:GetService("UserInputService")
 local Player = Players.LocalPlayer
+
 local SERVER_URL = "http://127.0.0.1:5000"
 local request_func = (syn and syn.request) or (http and http.request) or (http_request) or (fluxus and fluxus.request) or request
-local Remote = ReplicatedStorage:WaitForChild("RemoteFunction")
 
 local LiveStats = {Wave = "0 / 0", Health = 0, Cash = 0}
 
--- === GUI ===
-local ScreenGui = Instance.new("ScreenGui", Player.PlayerGui); ScreenGui.Name = "TDS_Combat"
-local Main = Instance.new("Frame", ScreenGui); Main.Size = UDim2.new(0, 180, 0, 100); Main.Position = UDim2.new(0, 20, 0.5, -50); Main.BackgroundColor3 = Color3.fromRGB(20, 20, 25)
-Instance.new("UICorner", Main).CornerRadius = UDim.new(0, 8)
-local Info = Instance.new("TextLabel", Main); Info.Size = UDim2.new(1, -20, 1, -10); Info.Position = UDim2.new(0, 10, 0, 5); Info.BackgroundTransparency = 1; Info.TextColor3 = Color3.new(1, 1, 1); Info.Font = Enum.Font.GothamMedium; Info.TextSize = 13; Info.TextXAlignment = Enum.TextXAlignment.Left; Info.Text = "Connecting..."
-
--- Dragging
-local d, ds, sp; Main.InputBegan:Connect(function(i) if i.UserInputType==Enum.UserInputType.MouseButton1 then d=true;ds=i.Position;sp=Main.Position end end)
-UserInputService.InputChanged:Connect(function(i) if d and i.UserInputType==Enum.UserInputType.MouseMovement then local dl=i.Position-ds;Main.Position=UDim2.new(sp.X.Scale,sp.X.Offset+dl.X,sp.Y.Scale,sp.Y.Offset+dl.Y) end end)
-UserInputService.InputEnded:Connect(function(i) if i.UserInputType==Enum.UserInputType.MouseButton1 then d=false end end)
-
--- INTERCEPT
+-- == Monitor Loop ==
 task.spawn(function()
-    local sb = ReplicatedStorage:WaitForChild("Network"):WaitForChild("Sandbox")
-    sb:WaitForChild("RE:SetStats").OnClientEvent:Connect(function(d)
-        if type(d) == "table" then
-            local cur = d.Wave or 0; local max = d.MaxWave or (d.WavesLeft and cur + d.WavesLeft) or "?"
-            LiveStats.Wave = cur .. " / " .. max; if d.Health then LiveStats.Health = d.Health end
-        end
-    end)
-end)
-
-local MatchConfig = {mode = "Easy", autoskip = false}
-task.spawn(function()
-    if request_func then
-        local s, r = pcall(function() return request_func({Url=SERVER_URL.."/get_match_config", Method="GET"}) end)
-        if s then
-            MatchConfig = HttpService:JSONDecode(r.Body)
-            task.wait(2); Remote:InvokeServer("Difficulty", "Vote", MatchConfig.mode)
-            task.wait(1); Remote:InvokeServer("Difficulty", "Ready")
-        end
-    end
-end)
-
-local lastSkip = 0
-task.spawn(function()
-    while task.wait(0.5) do
+    while task.wait(1) do
         pcall(function()
-            local h = Player.PlayerGui:FindFirstChild("ReactUniversalHotbar")
-            if h then LiveStats.Cash = tonumber(h.Frame.values.cash.amount.Text:gsub("%D","")) or 0 end
+            -- 1. Считываем Волну (Путь по твоему скриншоту)
+            local topGui = Player.PlayerGui:FindFirstChild("ReactGameTopGameDisplay")
+            if topGui then
+                local waveValue = topGui.Frame.wave.container.value
+                LiveStats.Wave = waveValue.Text -- Получаем текст типа "1 / 25"
+            end
+
+            -- 2. Считываем ХП Базы
+            local state = ReplicatedStorage:FindFirstChild("State")
+            if state and state:FindFirstChild("Health") then
+                LiveStats.Health = state.Health.Current.Value
+            end
+
+            -- 3. Считываем Деньги
+            local hotbar = Player.PlayerGui:FindFirstChild("ReactUniversalHotbar")
+            if hotbar then
+                local cashText = hotbar.Frame.values.cash.amount.Text
+                LiveStats.Cash = cashText:gsub("%D", "") -- Убираем символ $
+            end
         end)
-        Info.Text = "Wave: "..LiveStats.Wave.."\nHealth: "..LiveStats.Health.."\nCash: $"..LiveStats.Cash
-        if MatchConfig.autoskip and tick() - lastSkip > 3 then Remote:InvokeServer("Voting", "Skip"); lastSkip = tick() end
-        if request_func then pcall(function() request_func({Url=SERVER_URL.."/match_data", Method="POST", Headers={["Content-Type"]="application/json"}, Body=HttpService:JSONEncode({Stats=LiveStats, Towers={}})}) end) end
+
+        -- Отправляем данные на сервер
+        if request_func then
+            pcall(function()
+                request_func({
+                    Url = SERVER_URL .. "/match_data",
+                    Method = "POST",
+                    Headers = {["Content-Type"] = "application/json"},
+                    Body = HttpService:JSONEncode({Stats = LiveStats})
+                })
+            end)
+        end
     end
 end)
+
+print("Combat script loaded. Wave monitoring active.")
