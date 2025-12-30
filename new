@@ -2,28 +2,48 @@ local towers = {"Scout", "Paintballer", "Sniper", "Demoman", "Hunter", "Soldier"
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local HttpService = game:GetService("HttpService")
+local UserInputService = game:GetService("UserInputService")
 local Player = Players.LocalPlayer
 local Remote = ReplicatedStorage:WaitForChild("RemoteFunction")
 local SERVER_URL = "http://127.0.0.1:5000"
 local request_func = (syn and syn.request) or (http and http.request) or (http_request) or (fluxus and fluxus.request) or request
 
-local function checkAll()
-    repeat task.wait(1) until Player:FindFirstChild("Level") and Player:FindFirstChild("Coins")
+-- === GUI ИНВЕНТАРЬ ===
+local ScreenGui = Instance.new("ScreenGui", Player.PlayerGui); ScreenGui.Name = "TDS_Lobby"
+local Main = Instance.new("Frame", ScreenGui); Main.Size = UDim2.new(0, 220, 0, 300); Main.Position = UDim2.new(1, -230, 0.5, -150); Main.BackgroundColor3 = Color3.fromRGB(25, 25, 30)
+Instance.new("UICorner", Main).CornerRadius = UDim.new(0, 10)
+local Title = Instance.new("TextLabel", Main); Title.Size = UDim2.new(1, 0, 0, 30); Title.Text = "ИНВЕНТАРЬ"; Title.TextColor3 = Color3.new(1,1,1); Title.BackgroundTransparency = 1; Title.Font = Enum.Font.GothamBold
+local Scroll = Instance.new("ScrollingFrame", Main); Scroll.Size = UDim2.new(1, -10, 1, -40); Scroll.Position = UDim2.new(0, 5, 0, 35); Scroll.BackgroundTransparency = 1; Scroll.CanvasSize = UDim2.new(0,0,0, 1050); Scroll.ScrollBarThickness = 2
+
+local rows = {}
+for i, name in ipairs(towers) do
+    local R = Instance.new("Frame", Scroll); R.Size = UDim2.new(1, 0, 0, 25); R.Position = UDim2.new(0,0,0, (i-1)*27); R.BackgroundTransparency = 0.9
+    local T = Instance.new("TextLabel", R); T.Size = UDim2.new(0.8, 0, 1, 0); T.Text = name; T.TextColor3 = Color3.new(0.6,0.6,0.6); T.BackgroundTransparency = 1; T.TextXAlignment = Enum.TextXAlignment.Left; T.Position = UDim2.new(0,5,0,0)
+    local I = Instance.new("TextLabel", R); I.Size = UDim2.new(0, 20, 0, 20); I.Position = UDim2.new(1, -25, 0, 2); I.Text = "❌"; I.BackgroundTransparency = 1; I.TextColor3 = Color3.new(1,0,0)
+    rows[name] = I
+end
+
+-- Перетаскивание
+local d, ds, sp; Main.InputBegan:Connect(function(i) if i.UserInputType==Enum.UserInputType.MouseButton1 then d=true;ds=i.Position;sp=Main.Position end end)
+UserInputService.InputChanged:Connect(function(i) if d and i.UserInputType==Enum.UserInputType.MouseMovement then local dl=i.Position-ds;Main.Position=UDim2.new(sp.X.Scale,sp.X.Offset+dl.X,sp.Y.Scale,sp.Y.Offset+dl.Y) end end)
+UserInputService.InputEnded:Connect(function(i) if i.UserInputType==Enum.UserInputType.MouseButton1 then d=false end end)
+
+task.spawn(function()
+    repeat task.wait(1) until Player:FindFirstChild("Level")
     local inv = {}
     for _, n in ipairs(towers) do pcall(function() Remote:InvokeServer("Inventory", "Unequip", "tower", n) end) end
-    task.wait(0.5)
     for _, n in ipairs(towers) do
         local s, r = pcall(function() return Remote:InvokeServer("Inventory", "Equip", "tower", n) end)
-        inv[n] = (s and r ~= false)
+        local has = (s and r ~= false); inv[n] = has
+        if rows[n] then rows[n].Text = has and "✅" or "❌"; rows[n].TextColor3 = has and Color3.new(0,1,0) or Color3.new(1,0,0) end
         task.wait(0.05)
     end
     local stats = {
-        Triumphs = Player:FindFirstChild("Triumphs") and Player.Triumphs.Value or 0,
-        Loses = Player:FindFirstChild("Loses") and Player.Loses.Value or 0,
-        Coins = Player:FindFirstChild("Coins") and Player.Coins.Value or 0,
-        Gems = Player:FindFirstChild("Gems") and Player.Gems.Value or 0,
-        Level = Player.Level.Value
+        Triumphs=Player:FindFirstChild("Triumphs") and Player.Triumphs.Value or 0, 
+        Loses=Player:FindFirstChild("Loses") and Player.Loses.Value or 0, 
+        Coins=Player:FindFirstChild("Coins") and Player.Coins.Value or 0, 
+        Gems=Player:FindFirstChild("Gems") and Player.Gems.Value or 0, 
+        Level=Player.Level.Value
     }
     if request_func then pcall(function() request_func({Url=SERVER_URL.."/update", Method="POST", Headers={["Content-Type"]="application/json"}, Body=HttpService:JSONEncode({stats=stats, inventory=inv})}) end) end
-end
-task.spawn(checkAll)
+end)
