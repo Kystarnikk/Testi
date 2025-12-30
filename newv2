@@ -19,7 +19,7 @@ local Title = Instance.new("TextLabel"); Title.Size = UDim2.new(1, -10, 1, 0); T
 local PyStatus = Instance.new("TextLabel"); PyStatus.Size = UDim2.new(1, -10, 0, 20); PyStatus.Position = UDim2.new(0, 10, 0, 35); PyStatus.BackgroundTransparency = 1; PyStatus.Text = "Connecting..."; PyStatus.TextColor3 = Color3.fromRGB(255, 255, 0); PyStatus.Font = Enum.Font.GothamBold; PyStatus.TextSize = 11; PyStatus.TextXAlignment = Enum.TextXAlignment.Left; PyStatus.Parent = MainFrame
 local InfoLabel = Instance.new("TextLabel"); InfoLabel.Size = UDim2.new(1, -20, 0, 60); InfoLabel.Position = UDim2.new(0, 10, 0, 60); InfoLabel.BackgroundTransparency = 1; InfoLabel.Text = "Wave: 0\nHealth: 0\nCash: 0"; InfoLabel.TextColor3 = Color3.fromRGB(200, 200, 200); InfoLabel.Font = Enum.Font.Gotham; InfoLabel.TextSize = 12; InfoLabel.TextXAlignment = Enum.TextXAlignment.Left; InfoLabel.TextYAlignment = Enum.TextYAlignment.Top; InfoLabel.Parent = MainFrame
 
--- == DRAG SYSTEM ==
+-- == DRAG SYSTEM (ANTI-STICK) ==
 local dragging, dragInput, dragStart, startPos
 local function update(input)
     local delta = input.Position - dragStart
@@ -74,6 +74,7 @@ local function getEnemies()
     return enemies_data
 end
 
+-- == MEGA TOWER STATS ==
 local function getTowers()
     local my_towers = {}
     local towersFolder = Workspace:FindFirstChild("Towers")
@@ -81,16 +82,37 @@ local function getTowers()
         for _, tower in ipairs(towersFolder:GetChildren()) do
             local ownerVal = tower:FindFirstChild("Owner")
             if ownerVal and ownerVal.Value == Player.UserId then
-                local lvl = 0
-                if tower:FindFirstChild("Replicator") and tower.Replicator:GetAttribute("Level") then lvl = tower.Replicator:GetAttribute("Level")
-                elseif tower:GetAttribute("Level") then lvl = tower:GetAttribute("Level") end
-                local target = "First"
-                if tower:FindFirstChild("Target") then target = tower.Target.Value end
                 local root = tower:FindFirstChild("HumanoidRootPart")
-                if root then
+                local replicator = tower:FindFirstChild("Replicator")
+                
+                if root and replicator then
+                    local attr = replicator:GetAttributes()
+                    
+                    local level = attr["Level"] or 0
+                    local dmgDealt = attr["DamageDealt"] or 0
+                    local investment = attr["TotalInvestment"] or 0
+                    local sellPrice = math.floor(investment * 0.5)
+                    local currDmg = attr["Damage"] or 0
+                    local range = attr["Range"] or 0
+                    local cooldown = attr["Firerate"] or 0
+                    
+                    local upgCost = "Full"
+                    if level < 5 then upgCost = attr["NextUpgradeCost"] or "Unknown" end
+
+                    local bonuses = {}
+                    if attr["Camo"] or attr["Hidden"] then table.insert(bonuses, "Hidden") end
+                    if attr["Flying"] or attr["Lead"] then table.insert(bonuses, "Flying") end
+                    if #bonuses == 0 then table.insert(bonuses, "None") end
+
                     table.insert(my_towers, {
-                        Name = tower.Name, Level = lvl, Target = target,
-                        Pos = {x=math.floor(root.Position.X), z=math.floor(root.Position.Z)}
+                        Name = tower.Name,
+                        Level = level,
+                        Pos = {x = math.floor(root.Position.X), y = math.floor(root.Position.Y), z = math.floor(root.Position.Z)},
+                        Stats = {
+                            DmgDealt = dmgDealt, Sell = sellPrice, Cost = investment,
+                            Upgrade = upgCost, Dmg = currDmg, Rng = range, Cd = cooldown,
+                            Bonus = table.concat(bonuses, ", ")
+                        }
                     })
                 end
             end
@@ -99,6 +121,7 @@ local function getTowers()
     return my_towers
 end
 
+-- == CASH FIX (HOTBAR) ==
 local function getGameStats()
     local info = {Wave=0, Health=0, Cash=0}
     pcall(function()
@@ -122,7 +145,7 @@ local function getGameStats()
 end
 
 task.spawn(function()
-    while task.wait(0.1) do -- ЗАДЕРЖКА ТЕПЕРЬ 0.1 (БЫЛО 0.3)
+    while task.wait(0.1) do
         local stats = getGameStats()
         InfoLabel.Text = "Wave: " .. stats.Wave .. "\nHealth: " .. stats.Health .. "\nCash: $" .. stats.Cash
         
@@ -138,4 +161,4 @@ task.spawn(function()
         end
     end
 end)
-print("✅ COMBAT SCRIPT: TURBO MODE (0.1s)")
+print("✅ COMBAT SCRIPT: TURBO + HOTBAR + MEGASTATS")
