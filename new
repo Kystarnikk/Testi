@@ -8,86 +8,99 @@ local Remote = ReplicatedStorage:WaitForChild("RemoteFunction")
 local SERVER_URL = "http://127.0.0.1:5000"
 local request_func = (syn and syn.request) or (http and http.request) or (http_request) or (fluxus and fluxus.request) or request
 
--- === СОЗДАНИЕ МЕНЮ В ЛОББИ ===
+-- == ELEVATOR REMOTES ==
+local Network = ReplicatedStorage:WaitForChild("Network")
+local ElevatorsNet = Network:WaitForChild("Elevators")
+local EnterRemote = ElevatorsNet:WaitForChild("RF:Enter")
+
+-- === GUI SETUP ===
 local ScreenGui = Instance.new("ScreenGui", Player.PlayerGui); ScreenGui.Name = "TDS_Lobby_Hub"
-local Main = Instance.new("Frame", ScreenGui); Main.Size = UDim2.new(0, 250, 0, 380); Main.Position = UDim2.new(0.5, -125, 0.5, -190); Main.BackgroundColor3 = Color3.fromRGB(25, 25, 30); Main.BorderSizePixel = 0
+local Main = Instance.new("Frame", ScreenGui); Main.Size = UDim2.new(0, 250, 0, 380); Main.Position = UDim2.new(1, -260, 0.5, -190); Main.BackgroundColor3 = Color3.fromRGB(25, 25, 30)
 Instance.new("UICorner", Main).CornerRadius = UDim.new(0, 10)
 
--- Заголовок
-local Header = Instance.new("Frame", Main); Header.Size = UDim2.new(1, 0, 0, 40); Header.BackgroundColor3 = Color3.fromRGB(35, 35, 45); Header.BorderSizePixel = 0
+local Header = Instance.new("Frame", Main); Header.Size = UDim2.new(1, 0, 0, 40); Header.BackgroundColor3 = Color3.fromRGB(35, 35, 45)
 Instance.new("UICorner", Header).CornerRadius = UDim.new(0, 10)
-local Title = Instance.new("TextLabel", Header); Title.Size = UDim2.new(1, 0, 1, 0); Title.Text = "TDS AUTO-FARM LOBBY"; Title.TextColor3 = Color3.new(1, 1, 1); Title.Font = Enum.Font.GothamBold; Title.BackgroundTransparency = 1; Title.TextSize = 14
+local Title = Instance.new("TextLabel", Header); Title.Size = UDim2.new(1, 0, 1, 0); Title.Text = "TDS BOT LOBBY"; Title.TextColor3 = Color3.new(1, 1, 1); Title.Font = Enum.Font.GothamBold; Title.BackgroundTransparency = 1; Title.TextSize = 14
 
--- Статус сервера
-local Status = Instance.new("TextLabel", Main); Status.Size = UDim2.new(1, 0, 0, 20); Status.Position = UDim2.new(0, 0, 0, 45); Status.Text = "Status: Connecting..."; Status.TextColor3 = Color3.new(1, 0.5, 0); Status.Font = Enum.Font.Gotham; Status.TextSize = 12; Status.BackgroundTransparency = 1
+local Status = Instance.new("TextLabel", Main); Status.Size = UDim2.new(1, 0, 0, 20); Status.Position = UDim2.new(0, 0, 0, 45); Status.Text = "Status: Waiting..."; Status.TextColor3 = Color3.new(1, 0.8, 0); Status.Font = Enum.Font.Gotham; Status.TextSize = 11; Status.BackgroundTransparency = 1
 
--- Скролл инвентаря
-local Scroll = Instance.new("ScrollingFrame", Main); Scroll.Size = UDim2.new(1, -20, 0, 240); Scroll.Position = UDim2.new(0, 10, 0, 70); Scroll.BackgroundTransparency = 0.9; Scroll.BackgroundColor3 = Color3.new(0,0,0); Scroll.CanvasSize = UDim2.new(0, 0, 0, 1050); Scroll.ScrollBarThickness = 3; Scroll.BorderSizePixel = 0
+local Scroll = Instance.new("ScrollingFrame", Main); Scroll.Size = UDim2.new(1, -20, 0, 260); Scroll.Position = UDim2.new(0, 10, 0, 70); Scroll.BackgroundTransparency = 0.9; Scroll.CanvasSize = UDim2.new(0, 0, 0, 1050); Scroll.ScrollBarThickness = 2
 
 local rows = {}
 for i, name in ipairs(towers) do
     local R = Instance.new("Frame", Scroll); R.Size = UDim2.new(1, 0, 0, 25); R.Position = UDim2.new(0, 0, 0, (i-1)*27); R.BackgroundTransparency = 1
-    local T = Instance.new("TextLabel", R); T.Size = UDim2.new(0.8, 0, 1, 0); T.Text = name; T.TextColor3 = Color3.new(0.7, 0.7, 0.7); T.BackgroundTransparency = 1; T.TextXAlignment = Enum.TextXAlignment.Left; T.Position = UDim2.new(0, 5, 0, 0); T.Font = Enum.Font.Gotham
-    local I = Instance.new("TextLabel", R); I.Size = UDim2.new(0, 20, 0, 20); I.Position = UDim2.new(1, -25, 0, 2); I.Text = "⏳"; I.BackgroundTransparency = 1; I.TextColor3 = Color3.new(1, 1, 1)
+    local T = Instance.new("TextLabel", R); T.Size = UDim2.new(0.8, 0, 1, 0); T.Text = name; T.TextColor3 = Color3.new(0.7, 0.7, 0.7); T.BackgroundTransparency = 1; T.TextXAlignment = Enum.TextXAlignment.Left; T.Position = UDim2.new(0, 5, 0, 0)
+    local I = Instance.new("TextLabel", R); I.Size = UDim2.new(0, 20, 0, 20); I.Position = UDim2.new(1, -25, 0, 2); I.Text = "-"; I.BackgroundTransparency = 1; I.TextColor3 = Color3.new(1, 1, 1)
     rows[name] = I
 end
 
--- Кнопка принудительного обновления
-local Btn = Instance.new("TextButton", Main); Btn.Size = UDim2.new(1, -20, 0, 35); Btn.Position = UDim2.new(0, 10, 1, -45); Btn.BackgroundColor3 = Color3.fromRGB(0, 120, 215); Btn.Text = "ОБНОВИТЬ ИНВЕНТАРЬ"; Btn.TextColor3 = Color3.new(1, 1, 1); Btn.Font = Enum.Font.GothamBold; Btn.TextSize = 14
-Instance.new("UICorner", Btn).CornerRadius = UDim.new(0, 5)
-
--- Перетаскивание (Drag)
+-- Dragging
 local d, ds, sp; Main.InputBegan:Connect(function(i) if i.UserInputType==Enum.UserInputType.MouseButton1 then d=true;ds=i.Position;sp=Main.Position end end)
 UserInputService.InputChanged:Connect(function(i) if d and i.UserInputType==Enum.UserInputType.MouseMovement then local dl=i.Position-ds;Main.Position=UDim2.new(sp.X.Scale,sp.X.Offset+dl.X,sp.Y.Scale,sp.Y.Offset+dl.Y) end end)
 UserInputService.InputEnded:Connect(function(i) if i.UserInputType==Enum.UserInputType.MouseButton1 then d=false end end)
 
--- === ЛОГИКА ===
+-- === LOGIC: INVENTORY ===
 local function checkInventory()
-    Status.Text = "Status: Checking Inventory..."; Status.TextColor3 = Color3.new(1, 0.5, 0)
-    repeat task.wait(1) until Player:FindFirstChild("Level") and Player:FindFirstChild("Coins")
-    
-    local inv = {}
-    -- Снимаем всё
+    repeat task.wait(1) until Player:FindFirstChild("Level")
+    Status.Text = "Status: Checking Inventory..."; local inv = {}
     for _, n in ipairs(towers) do pcall(function() Remote:InvokeServer("Inventory", "Unequip", "tower", n) end) end
-    task.wait(0.5)
-
-    -- Надеваем и проверяем
     for _, n in ipairs(towers) do
         local s, r = pcall(function() return Remote:InvokeServer("Inventory", "Equip", "tower", n) end)
-        local has = (s and r ~= false)
-        inv[n] = has
-        if rows[n] then 
-            rows[n].Text = has and "✅" or "❌" 
-            rows[n].TextColor3 = has and Color3.new(0, 1, 0) or Color3.new(1, 0, 0)
-        end
-        task.wait(0.05)
+        local has = (s and r ~= false); inv[n] = has
+        if rows[n] then rows[n].Text = has and "OK" or "X"; rows[n].TextColor3 = has and Color3.new(0,1,0) or Color3.new(1,0,0) end
+        task.wait(0.02)
     end
-
-    local stats = {
-        Triumphs = Player:FindFirstChild("Triumphs") and Player.Triumphs.Value or 0,
-        Loses = Player:FindFirstChild("Loses") and Player.Loses.Value or 0,
-        Coins = Player:FindFirstChild("Coins") and Player.Coins.Value or 0,
-        Gems = Player:FindFirstChild("Gems") and Player.Gems.Value or 0,
-        Level = Player.Level.Value
-    }
-
-    if request_func then
-        local success, res = pcall(function()
-            return request_func({
-                Url = SERVER_URL .. "/update",
-                Method = "POST",
-                Headers = {["Content-Type"] = "application/json"},
-                Body = HttpService:JSONEncode({stats = stats, inventory = inv})
-            })
-        end)
-        
-        if success then
-            Status.Text = "Status: Connected to Python!"; Status.TextColor3 = Color3.new(0, 1, 0)
-        else
-            Status.Text = "Status: Python Server Offline!"; Status.TextColor3 = Color3.new(1, 0, 0)
-        end
-    end
+    local stats = {Triumphs=Player.Triumphs.Value, Loses=Player.Loses.Value, Coins=Player.Coins.Value, Gems=Player.Gems.Value, Level=Player.Level.Value}
+    if request_func then pcall(function() request_func({Url=SERVER_URL.."/update", Method="POST", Headers={["Content-Type"]="application/json"}, Body=HttpService:JSONEncode({stats=stats, inventory=inv})}) end) end
+    Status.Text = "Status: Connected to Python"; Status.TextColor3 = Color3.new(0,1,0)
 end
 
-Btn.MouseButton1Click:Connect(checkInventory)
+-- === LOGIC: TELEPORT ===
+local isSearching = false
+local function pollCommands()
+    if isSearching then return end
+    task.spawn(function()
+        if not request_func then return end
+        local success, res = pcall(function() return request_func({Url=SERVER_URL.."/get_cmd", Method="GET"}) end)
+        if success and res.StatusCode == 200 then
+            local data = HttpService:JSONDecode(res.Body)
+            if data.pending then
+                isSearching = true
+                local targetMap = data.map
+                local targetCat = data.category
+                Status.Text = "Searching Lift: " .. targetMap
+                
+                while isSearching do
+                    for _, elev in ipairs(workspace:WaitForChild("Elevators"):GetChildren()) do
+                        pcall(function()
+                            local surface = elev.Screen.SurfaceGui.content
+                            local players = surface.timer.players.Text
+                            local isFree = (players == "0/4" or players == "0/1") and surface.timer.state.Text ~= "Teleporting"
+                            
+                            local mapFound = false
+                            if targetMap == "RANDOM" then
+                                if surface.mode.Text:upper() == targetCat:upper() then mapFound = true end
+                            else
+                                if surface.title.Text == targetMap then mapFound = true end
+                            end
+
+                            if isFree and mapFound then
+                                Status.Text = "Found Elevator! Joining..."
+                                local root = Player.Character and Player.Character:FindFirstChild("HumanoidRootPart")
+                                if root then root.CFrame = elev.Touch.CFrame + Vector3.new(0,3,0) end
+                                task.wait(0.5)
+                                EnterRemote:InvokeServer(elev)
+                                isSearching = false
+                            end
+                        end)
+                        if not isSearching then break end
+                    end
+                    task.wait(1.5)
+                end
+            end
+        end
+    end)
+end
+
 task.spawn(checkInventory)
+task.spawn(function() while task.wait(2) do pollCommands() end end)
