@@ -19,7 +19,7 @@ local Title = Instance.new("TextLabel"); Title.Size = UDim2.new(1, -10, 1, 0); T
 local PyStatus = Instance.new("TextLabel"); PyStatus.Size = UDim2.new(1, -10, 0, 20); PyStatus.Position = UDim2.new(0, 10, 0, 35); PyStatus.BackgroundTransparency = 1; PyStatus.Text = "Connecting..."; PyStatus.TextColor3 = Color3.fromRGB(255, 255, 0); PyStatus.Font = Enum.Font.GothamBold; PyStatus.TextSize = 11; PyStatus.TextXAlignment = Enum.TextXAlignment.Left; PyStatus.Parent = MainFrame
 local InfoLabel = Instance.new("TextLabel"); InfoLabel.Size = UDim2.new(1, -20, 0, 60); InfoLabel.Position = UDim2.new(0, 10, 0, 60); InfoLabel.BackgroundTransparency = 1; InfoLabel.Text = "Wave: 0\nHealth: 0\nCash: 0"; InfoLabel.TextColor3 = Color3.fromRGB(200, 200, 200); InfoLabel.Font = Enum.Font.Gotham; InfoLabel.TextSize = 12; InfoLabel.TextXAlignment = Enum.TextXAlignment.Left; InfoLabel.TextYAlignment = Enum.TextYAlignment.Top; InfoLabel.Parent = MainFrame
 
--- == DRAGGING FIX ==
+-- == DRAG FIX ==
 local dragging, dragInput, dragStart, startPos
 local function update(input)
     local delta = input.Position - dragStart
@@ -99,11 +99,11 @@ local function getTowers()
     return my_towers
 end
 
--- == FINAL CASH FIX (ПРИОРИТЕТ НА ТЕКСТ) ==
+-- == CASH FIX: READING FROM GUI TEXT ==
 local function getGameStats()
     local info = {Wave=0, Health=0, Cash=0}
     
-    -- 1. WAVE & HEALTH (State - всегда точно)
+    -- 1. Wave & Health (State надежен)
     pcall(function()
         if State then
             if State:FindFirstChild("Wave") then info.Wave = State.Wave.Value end
@@ -111,37 +111,30 @@ local function getGameStats()
         end
     end)
     
-    -- 2. CASH (Теперь сначала ищем ТЕКСТ, и только потом Value)
+    -- 2. CASH (Приоритет на чтение текста с экрана)
     pcall(function()
-        local foundCash = false
-        
-        -- СПОСОБ 1: Читаем текст с экрана (Там всегда правильное число)
+        local found = false
         local gui = PlayerGui:FindFirstChild("GameGui")
+        
         if gui then
-            local cashObj = gui:FindFirstChild("Money", true) or gui:FindFirstChild("Cash", true)
-            if cashObj and cashObj:IsA("TextLabel") then
-                -- Убираем $ и запятые
-                local txt = cashObj.Text:gsub("%$", ""):gsub(",", "")
-                local num = tonumber(txt)
-                if num then
-                    info.Cash = num
-                    foundCash = true
+            -- Ищем лейбл с деньгами (обычно называется Money или Cash и содержит знак $)
+            for _, v in ipairs(gui:GetDescendants()) do
+                if v:IsA("TextLabel") and (v.Name == "Money" or v.Name == "Cash" or v.Text:find("%$")) then
+                     -- Очищаем текст от $ и запятых
+                    local cleanText = v.Text:gsub("%$", ""):gsub(",", "")
+                    local num = tonumber(cleanText)
+                    if num and num >= 0 then
+                        info.Cash = num
+                        found = true
+                        break -- Нашли, выходим
+                    end
                 end
             end
         end
         
-        -- СПОСОБ 2: Leaderstats (Если текст не нашли)
-        if not foundCash and Player:FindFirstChild("leaderstats") then
-            local ls = Player.leaderstats
-            if ls:FindFirstChild("Cash") then info.Cash = ls.Cash.Value 
-            elseif ls:FindFirstChild("Money") then info.Cash = ls.Money.Value end
-        end
-        
-        -- СПОСОБ 3: Player.Cash (ТОЛЬКО ЕСЛИ ОНО НЕ ОТРИЦАТЕЛЬНОЕ)
-        if not foundCash and info.Cash <= 0 and Player:FindFirstChild("Cash") then
-            if Player.Cash.Value > 0 then -- Берем только если положительное
-                info.Cash = Player.Cash.Value
-            end
+        -- Запасной вариант (если GUI не найден), берем Value только если оно положительное
+        if not found and Player:FindFirstChild("Cash") and Player.Cash.Value >= 0 then
+            info.Cash = Player.Cash.Value
         end
     end)
     
@@ -165,4 +158,4 @@ task.spawn(function()
         end
     end
 end)
-print("✅ COMBAT SCRIPT: CASH FIXED v5")
+print("✅ COMBAT SCRIPT: GUI READ FIX")
