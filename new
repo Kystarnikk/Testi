@@ -1,79 +1,29 @@
-local towers = {
-    "Scout", "Paintballer", "Sniper", "Demoman", "Hunter", "Soldier", "Militant", "Crook Boss", "Freezer", "Assassin", 
-    "Shotgunner", "Pyromancer", "Ace Pilot", "Medic", "Farm", "Rocketeer", "Trapper", "Military Base", "Mortar", "Turret", 
-    "Mercenary Base", "Electroshocker", "Warden", "Cowboy", "Commander", "DJ Booth", "Minigunner", "Ranger", "Pursuit", 
-    "Gatling Gun", "Brawler", "Necromancer", "Accelerator", "Engineer", "Hacker", "Snowballer", "Executioner", "Swarmer"
-}
-
+local towers = {"Scout", "Paintballer", "Sniper", "Demoman", "Hunter", "Soldier", "Militant", "Crook Boss", "Freezer", "Assassin", "Shotgunner", "Pyromancer", "Ace Pilot", "Medic", "Farm", "Rocketeer", "Trapper", "Military Base", "Mortar", "Turret", "Mercenary Base", "Electroshocker", "Warden", "Cowboy", "Commander", "DJ Booth", "Minigunner", "Ranger", "Pursuit", "Gatling Gun", "Brawler", "Necromancer", "Accelerator", "Engineer", "Hacker", "Snowballer", "Executioner", "Swarmer"}
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local HttpService = game:GetService("HttpService")
 local Player = Players.LocalPlayer
-local PlayerGui = Player:WaitForChild("PlayerGui")
 local Remote = ReplicatedStorage:WaitForChild("RemoteFunction")
-
 local SERVER_URL = "http://127.0.0.1:5000"
-local inventory_data = {}
 local request_func = (syn and syn.request) or (http and http.request) or (http_request) or (fluxus and fluxus.request) or request
 
--- == GUI ==
-if PlayerGui:FindFirstChild("TDS_LobbyHub") then PlayerGui.TDS_LobbyHub:Destroy() end
-local ScreenGui = Instance.new("ScreenGui", PlayerGui); ScreenGui.Name = "TDS_LobbyHub"
-local Main = Instance.new("Frame", ScreenGui); Main.Size = UDim2.new(0, 250, 0, 350); Main.Position = UDim2.new(1, -260, 0.5, -175); Main.BackgroundColor3 = Color3.fromRGB(25, 25, 30)
-local Scroll = Instance.new("ScrollingFrame", Main); Scroll.Size = UDim2.new(1, -10, 1, -10); Scroll.Position = UDim2.new(0, 5, 0, 5); Scroll.BackgroundTransparency = 1; Scroll.CanvasSize = UDim2.new(0,0,0,1100); Scroll.ScrollBarThickness = 3
-
-local rows = {}
-for i, name in ipairs(towers) do
-    local R = Instance.new("Frame", Scroll); R.Size = UDim2.new(1, 0, 0, 25); R.Position = UDim2.new(0,0,0, (i-1)*27); R.BackgroundTransparency = 0.8
-    local T = Instance.new("TextLabel", R); T.Size = UDim2.new(0.8, 0, 1, 0); T.Text = name; T.TextColor3 = Color3.new(1,1,1); T.BackgroundTransparency = 1; T.TextXAlignment = Enum.TextXAlignment.Left
-    local I = Instance.new("ImageLabel", R); I.Size = UDim2.new(0, 18, 0, 18); I.Position = UDim2.new(1, -22, 0.5, -9); I.BackgroundTransparency = 1; I.Image = "rbxassetid://6031094678" -- По умолчанию крестик
-    rows[name] = I
-end
-
--- == ПРОВЕРКА ИНВЕНТАРЯ ==
-local function checkInventory()
-    -- Сначала всё снимаем
-    for _, name in ipairs(towers) do
-        pcall(function() Remote:InvokeServer("Inventory", "Unequip", "tower", name) end)
+local function checkAll()
+    repeat task.wait(1) until Player:FindFirstChild("Level") and Player:FindFirstChild("Coins")
+    local inv = {}
+    for _, n in ipairs(towers) do pcall(function() Remote:InvokeServer("Inventory", "Unequip", "tower", n) end) end
+    task.wait(0.5)
+    for _, n in ipairs(towers) do
+        local s, r = pcall(function() return Remote:InvokeServer("Inventory", "Equip", "tower", n) end)
+        inv[n] = (s and r ~= false)
+        task.wait(0.05)
     end
-    task.wait(1)
-
-    -- Проверяем каждую башню
-    for _, name in ipairs(towers) do
-        local success, result = pcall(function() 
-            return Remote:InvokeServer("Inventory", "Equip", "tower", name) 
-        end)
-        
-        -- Если сервер ответил "true" или не выдал ошибку — значит башня есть
-        local hasTower = (success and result ~= false)
-        inventory_data[name] = hasTower
-        
-        if rows[name] then
-            rows[name].Image = hasTower and "rbxassetid://6031068426" or "rbxassetid://6031094678"
-            rows[name].ImageColor3 = hasTower and Color3.new(0,1,0) or Color3.new(1,0,0)
-        end
-        task.wait(0.1) -- Небольшая пауза, чтобы не кикнуло за спам
-    end
-    
-    -- Отправляем финальный список в Python
     local stats = {
         Triumphs = Player:FindFirstChild("Triumphs") and Player.Triumphs.Value or 0,
         Loses = Player:FindFirstChild("Loses") and Player.Loses.Value or 0,
         Coins = Player:FindFirstChild("Coins") and Player.Coins.Value or 0,
         Gems = Player:FindFirstChild("Gems") and Player.Gems.Value or 0,
-        Level = Player:FindFirstChild("Level") and Player.Level.Value or 0
+        Level = Player.Level.Value
     }
-    
-    if request_func then
-        pcall(function()
-            request_func({
-                Url = SERVER_URL .. "/update",
-                Method = "POST",
-                Headers = {["Content-Type"] = "application/json"},
-                Body = HttpService:JSONEncode({stats = stats, inventory = inventory_data})
-            })
-        end)
-    end
+    if request_func then pcall(function() request_func({Url=SERVER_URL.."/update", Method="POST", Headers={["Content-Type"]="application/json"}, Body=HttpService:JSONEncode({stats=stats, inventory=inv})}) end) end
 end
-
-task.spawn(checkInventory)
+task.spawn(checkAll)
