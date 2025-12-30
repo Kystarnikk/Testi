@@ -9,18 +9,18 @@ local Remote = ReplicatedStorage:WaitForChild("RemoteFunction")
 
 local LiveStats = {Wave = "0 / 0", Health = 0, Cash = 0}
 
--- === GUI БОЙ ===
+-- === GUI ===
 local ScreenGui = Instance.new("ScreenGui", Player.PlayerGui); ScreenGui.Name = "TDS_Combat"
 local Main = Instance.new("Frame", ScreenGui); Main.Size = UDim2.new(0, 180, 0, 100); Main.Position = UDim2.new(0, 20, 0.5, -50); Main.BackgroundColor3 = Color3.fromRGB(20, 20, 25)
 Instance.new("UICorner", Main).CornerRadius = UDim.new(0, 8)
-local Info = Instance.new("TextLabel", Main); Info.Size = UDim2.new(1, -20, 1, -10); Info.Position = UDim2.new(0, 10, 0, 5); Info.BackgroundTransparency = 1; Info.TextColor3 = Color3.new(1, 1, 1); Info.Font = Enum.Font.GothamMedium; Info.TextSize = 13; Info.TextXAlignment = Enum.TextXAlignment.Left; Info.Text = "Загрузка данных..."
+local Info = Instance.new("TextLabel", Main); Info.Size = UDim2.new(1, -20, 1, -10); Info.Position = UDim2.new(0, 10, 0, 5); Info.BackgroundTransparency = 1; Info.TextColor3 = Color3.new(1, 1, 1); Info.Font = Enum.Font.GothamMedium; Info.TextSize = 13; Info.TextXAlignment = Enum.TextXAlignment.Left; Info.Text = "Connecting..."
 
--- Перетаскивание
+-- Dragging
 local d, ds, sp; Main.InputBegan:Connect(function(i) if i.UserInputType==Enum.UserInputType.MouseButton1 then d=true;ds=i.Position;sp=Main.Position end end)
 UserInputService.InputChanged:Connect(function(i) if d and i.UserInputType==Enum.UserInputType.MouseMovement then local dl=i.Position-ds;Main.Position=UDim2.new(sp.X.Scale,sp.X.Offset+dl.X,sp.Y.Scale,sp.Y.Offset+dl.Y) end end)
 UserInputService.InputEnded:Connect(function(i) if i.UserInputType==Enum.UserInputType.MouseButton1 then d=false end end)
 
--- ПЕРЕХВАТ ВОЛН (Твой путь)
+-- INTERCEPT
 task.spawn(function()
     local sb = ReplicatedStorage:WaitForChild("Network"):WaitForChild("Sandbox")
     sb:WaitForChild("RE:SetStats").OnClientEvent:Connect(function(d)
@@ -50,7 +50,7 @@ task.spawn(function()
             local h = Player.PlayerGui:FindFirstChild("ReactUniversalHotbar")
             if h then LiveStats.Cash = tonumber(h.Frame.values.cash.amount.Text:gsub("%D","")) or 0 end
         end)
-        Info.Text = "🌊 Волна: "..LiveStats.Wave.."\n❤️ ХП: "..LiveStats.Health.."\n💰 Деньги: $"..LiveStats.Cash
+        Info.Text = "Wave: "..LiveStats.Wave.."\nHealth: "..LiveStats.Health.."\nCash: $"..LiveStats.Cash
         if MatchConfig.autoskip and tick() - lastSkip > 3 then Remote:InvokeServer("Voting", "Skip"); lastSkip = tick() end
         if request_func then pcall(function() request_func({Url=SERVER_URL.."/match_data", Method="POST", Headers={["Content-Type"]="application/json"}, Body=HttpService:JSONEncode({Stats=LiveStats, Towers={}})}) end) end
     end
