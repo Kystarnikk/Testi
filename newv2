@@ -99,48 +99,33 @@ local function getTowers()
     return my_towers
 end
 
--- == SMART MONEY READER ==
--- Эта функция ищет текст на экране, игнорируя "поломанную" переменную Cash
-local function getRealCash()
-    local cash = 0
-    local found = false
-    
-    -- 1. Ищем GUI (Самый точный способ)
-    local gui = PlayerGui:FindFirstChild("GameGui")
-    if gui then
-        -- Пробегаем по всем текстовым полям в интерфейсе
-        for _, v in ipairs(gui:GetDescendants()) do
-            if v:IsA("TextLabel") then
-                -- Если имя похоже на деньги или текст содержит "$"
-                if v.Name == "Money" or v.Name == "Cash" or v.Name == "MoneyValue" then
-                    local clean = v.Text:gsub("%$", ""):gsub(",", "") -- Убираем $ и ,
-                    if tonumber(clean) then
-                        cash = tonumber(clean)
-                        found = true
-                        break 
-                    end
-                end
-            end
-        end
-    end
-    
-    -- 2. Запасной вариант: Leaderstats (Иногда работает)
-    if not found and Player:FindFirstChild("leaderstats") then
-        if Player.leaderstats:FindFirstChild("Cash") then cash = Player.leaderstats.Cash.Value end
-    end
-    
-    return cash
-end
-
+-- == FINAL CASH LOGIC (HOTBAR TEXT) ==
 local function getGameStats()
     local info = {Wave=0, Health=0, Cash=0}
+    
+    -- 1. WAVE & HEALTH
     pcall(function()
         if State then
             if State:FindFirstChild("Wave") then info.Wave = State.Wave.Value end
             if State:FindFirstChild("Health") then info.Health = State.Health.Current.Value end
         end
-        info.Cash = getRealCash() -- Используем нашу новую функцию
     end)
+    
+    -- 2. CASH (Directly from ReactUniversalHotbar)
+    pcall(function()
+        local hotbar = PlayerGui:FindFirstChild("ReactUniversalHotbar")
+        if hotbar and hotbar:FindFirstChild("Frame") then
+            -- Путь из твоего скриншота
+            local amountLabel = hotbar.Frame.values.cash.amount
+            if amountLabel and amountLabel:IsA("TextLabel") then
+                -- Чистим текст ($9,697 -> 9697)
+                local clean = amountLabel.Text:gsub("%$", ""):gsub(",", ""):gsub(" ", "")
+                local num = tonumber(clean)
+                if num then info.Cash = num end
+            end
+        end
+    end)
+    
     return info
 end
 
@@ -161,4 +146,4 @@ task.spawn(function()
         end
     end
 end)
-print("✅ COMBAT SCRIPT: SCREEN READER ACTIVE")
+print("✅ COMBAT SCRIPT: HOTBAR LINKED")
