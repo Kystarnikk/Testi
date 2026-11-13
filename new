@@ -1,1 +1,180 @@
+-- Уведомления на экране телефона
+local function notify(title, text)
+    pcall(function()
+        game:GetService("StarterGui"):SetCore("SendNotification", {
+            Title = title,
+            Text = text,
+            Duration = 3
+        })
+    end)
+end
 
+notify("Delta Bot", "Запуск байпаса...")
+
+-->> Teleport Bypass <<--
+local successHook, hookError = pcall(function()
+    local OldNamecallTP;
+    OldNamecallTP = hookmetamethod(game, '__namecall', newcclosure(function(self, ...)
+        local Arguments = {...}
+        local Method = getnamecallmethod()
+
+        if Method == "InvokeServer" and Arguments[1] == "idklolbrah2de" then
+            return "  ___XP DE KEY"
+        end
+        
+        return OldNamecallTP(self, ...)
+    end))
+end)
+
+if not successHook then
+    notify("Ошибка хука", tostring(hookError))
+else
+    notify("Delta Bot", "Байпас активирован!")
+end
+
+task.wait(0.5)
+
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+
+-- Координаты точек
+local Points = {
+    Vector3.new(31.22, 1.24, -894.65),
+    Vector3.new(116.65, -30.46, -385.55),
+    Vector3.new(211.88, -31.01, -267.30),
+    Vector3.new(-145.76, 1.27, -287.11),
+    Vector3.new(435.71, 12.09, -294.02),
+    Vector3.new(-222.16, 1.47, 40.99),
+    Vector3.new(-53.78, 8.30, 142.91),
+    Vector3.new(-133.15, 1.39, -16.04),
+    Vector3.new(-96.54, -29.80, -32.96),
+    Vector3.new(-183.13, -30.63, -454.42),
+    Vector3.new(-130.40, 0.98, 131.67),
+    Vector3.new(3.77, 0.54, 199.63),
+    Vector3.new(219.94, 1.33, -461.58),
+    Vector3.new(371.89, -28.50, -189.69),
+    Vector3.new(-6.92, 0.73, -617.88),
+    Vector3.new(289.07, 0.47, -352.50),
+    Vector3.new(159.04, 0.52, -392.90),
+    Vector3.new(-35.59, -7.83, 340.41),
+    Vector3.new(69.01, 0.54, -168.11),
+    Vector3.new(-61.33, 1.18, -683.20),
+    Vector3.new(319.87, -30.50, -213.09),
+    Vector3.new(173.04, -30.29, -199.56),
+    Vector3.new(121.42, 0.10, -270.43),
+    Vector3.new(133.97, 0.17, -334.25),
+    Vector3.new(79.16, -29.84, -292.05),
+    Vector3.new(435.98, 8.31, -231.78),
+    Vector3.new(215.44, 0.68, -92.03),
+    Vector3.new(175.44, 3.10, -41.78),
+    Vector3.new(340.00, -31.12, -119.76),
+    Vector3.new(136.35, -31.17, -34.17),
+    Vector3.new(82.55, -30.46, -63.56)
+}
+
+-- Безопасный телепорт под мобильный движок
+local function mobileTeleport(pos)
+    local char = LocalPlayer.Character
+    if not char then return end
+    
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    if hrp then
+        -- Сбрасываем инерцию движения, чтобы не откидывало назад
+        hrp.AssemblyLinearVelocity = Vector3.zero
+        hrp.AssemblyAngularVelocity = Vector3.zero
+        
+        -- Смещаем на +2.5 вверх, чтобы не падать сквозь пол
+        hrp.CFrame = CFrame.new(pos + Vector3.new(0, 2.5, 0))
+    end
+end
+
+-- Активация ProximityPrompt для Delta
+local function mobilePrompt(prompt)
+    if not prompt or not prompt:IsA("ProximityPrompt") then return end
+    
+    pcall(function()
+        prompt.HoldDuration = 0
+        prompt.RequiresLineOfSight = false
+        prompt.MaxActivationDistance = 9999
+    end)
+    
+    task.spawn(function()
+        pcall(function()
+            if fireproximityprompt then
+                fireproximityprompt(prompt, 0)
+                fireproximityprompt(prompt)
+            end
+        end)
+    end)
+end
+
+-- Проход по точкам
+local function runPoints(waitTime)
+    notify("Точки", "Телепорт по точкам (" .. waitTime .. "с)...")
+    for _, point in ipairs(Points) do
+        mobileTeleport(point)
+        task.wait(waitTime)
+    end
+end
+
+-- Сбор предметов
+local function collectItems()
+    local itemSpawns = workspace:FindFirstChild("Item_Spawns")
+    if not itemSpawns then
+        notify("Внимание", "Папка Item_Spawns не найдена!")
+        return false
+    end
+    
+    local itemsFolder = itemSpawns:FindFirstChild("Items")
+    if not itemsFolder then
+        notify("Внимание", "Папка Items не найдена!")
+        return false
+    end
+    
+    local items = itemsFolder:GetChildren()
+    if #items == 0 then
+        notify("Статус", "Предметов нет (0)")
+        return false
+    end
+    
+    notify("Сбор", "Найдено предметов: " .. #items)
+    
+    for _, item in ipairs(items) do
+        local pos = nil
+        if item:IsA("Model") then
+            pos = item:GetPivot().Position
+        elseif item:IsA("BasePart") then
+            pos = item.Position
+        end
+        
+        if pos then
+            mobileTeleport(pos)
+            task.wait(0.15)
+            
+            for _, obj in ipairs(item:GetDescendants()) do
+                if obj:IsA("ProximityPrompt") then
+                    mobilePrompt(obj)
+                    task.wait(0.1)
+                end
+            end
+        end
+    end
+    return true
+end
+
+-- ВЫПОЛНЕНИЕ:
+
+-- 1. Первый медленный круг
+runPoints(0.5)
+
+-- 2. Сбор
+local hasItems = collectItems()
+
+-- 3. Если предметов не было — ускоренный круг
+if not hasItems then
+    notify("Статус", "Предметов не было, запускаю быстрый круг (0.2с)")
+    runPoints(0.2)
+    collectItems()
+end
+
+notify("Delta Bot", "Работа скрипта завершена!")
